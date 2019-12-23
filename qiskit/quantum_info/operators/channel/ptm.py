@@ -288,6 +288,21 @@ class PTM(QuantumChannel):
             raise QiskitError("other is not a number")
         return PTM(other * self._data, self._input_dims, self._output_dims)
 
+    def round(self, decimals=0):
+        """Round an operator to the given number of decimals.
+
+        Args:
+            decimals (int): Number of decimal places to round to (default: 0).
+                If decimals is negative, it specifies the number of positions to
+                the left of the decimal point.
+
+        Returns:
+            PTM: the rounded operator.
+        """
+        return PTM(np.round(self.data, decimals=decimals),
+                   input_dims=self._input_dims,
+                   output_dims=self._output_dims)
+
     def _evolve(self, state, qargs=None):
         """Evolve a quantum state by the quantum channel.
 

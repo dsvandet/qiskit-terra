@@ -135,6 +135,20 @@ class QuantumChannel(BaseOperator):
         return state
 
     @abstractmethod
+    def round(self, decimals=0):
+        """Round a quanutm channel operator to the given number of decimals.
+
+        Args:
+            decimals (int): Number of decimal places to round to (default: 0).
+                If decimals is negative, it specifies the number of positions to
+                the left of the decimal point.
+
+        Returns:
+            QuantumChannel: the rounded operator.
+        """
+        pass
+
+    @abstractmethod
     def _evolve(self, state, qargs=None):
         """Evolve a quantum state by the quantum channel.
 

@@ -366,6 +366,25 @@ class Kraus(QuantumChannel):
             kraus_r = [val * k for k in self._data[1]]
         return Kraus((kraus_l, kraus_r), self._input_dim, self._output_dim)
 
+    def round(self, decimals=0):
+        """Round an operator to the given number of decimals.
+
+        Args:
+            decimals (int): Number of decimal places to round to (default: 0).
+                If decimals is negative, it specifies the number of positions to
+                the left of the decimal point.
+
+        Returns:
+            Kraus: the rounded operator.
+        """
+        kraus_l, kraus_r = self._data
+        kraus_l = [np.round(i, decimals=decimals) for i in kraus_l]
+        if kraus_r is not None:
+            kraus_r = [np.round(i, decimals=decimals) for i in kraus_r]
+        return Kraus((kraus_l, kraus_r),
+                     input_dims=self._input_dims,
+                     output_dims=self._output_dims)
+
     def _evolve(self, state, qargs=None):
         """Evolve a quantum state by the quantum channel.
 

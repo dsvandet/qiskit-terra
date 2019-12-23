@@ -254,6 +254,20 @@ class Statevector(QuantumState):
         return matrix_equal(self.data, other.data, ignore_phase=True,
                             rtol=rtol, atol=atol)
 
+    def round(self, decimals=0):
+        """Round to the given number of decimals.
+
+        Args:
+            decimals (int): Number of decimal places to round to (default: 0).
+                If decimals is negative, it specifies the number of positions to
+                the left of the decimal point.
+
+        Returns:
+            Statevector: the rounded operator.
+        """
+        return Statevector(np.round(self.data, decimals=decimals),
+                           dims=self._dims)
+
     def to_counts(self):
         """Returns the statevector as a counts dict
         of probabilities.

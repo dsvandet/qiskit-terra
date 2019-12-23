@@ -230,6 +230,20 @@ class DensityMatrix(QuantumState):
         # Unitary evolution by an Operator
         return self._evolve_operator(other, qargs=qargs)
 
+    def round(self, decimals=0):
+        """Round to the given number of decimals.
+
+        Args:
+            decimals (int): Number of decimal places to round to (default: 0).
+                If decimals is negative, it specifies the number of positions to
+                the left of the decimal point.
+
+        Returns:
+            DensityMatrix: the rounded operator.
+        """
+        return DensityMatrix(np.round(self.data, decimals=decimals),
+                             dims=self._dims)
+
     @classmethod
     def from_label(cls, label):
         """Return a tensor product of Pauli X,Y,Z eigenstates.

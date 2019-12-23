@@ -74,11 +74,11 @@ class Operator(BaseOperator):
             # higher preference than the 'to_matrix' method for initializing
             # an Operator object.
             data = data.to_operator()
-            mat = data.data
+            mat = data._data
             if input_dims is None:
-                input_dims = data.input_dims()
+                input_dims = data._input_dims
             if output_dims is None:
-                output_dims = data.output_dims()
+                output_dims = data._output_dims
         elif hasattr(data, 'to_matrix'):
             # If no 'to_operator' attribute exists we next look for a
             # 'to_matrix' attribute to a matrix that will be cast into
@@ -135,6 +135,8 @@ class Operator(BaseOperator):
             'H': HGate().to_matrix(),
             'S': SGate().to_matrix(),
             'T': TGate().to_matrix(),
+            'P': np.array([[0, 1], [0, 0]], dtype=complex),
+            'M': np.array([[0, 0], [1, 0]], dtype=complex),
             '0': np.array([[1, 0], [0, 0]], dtype=complex),
             '1': np.array([[0, 0], [0, 1]], dtype=complex),
             '+': np.array([[0.5, 0.5], [0.5, 0.5]], dtype=complex),
@@ -142,7 +144,7 @@ class Operator(BaseOperator):
             'r': np.array([[0.5, -0.5j], [0.5j, 0.5]], dtype=complex),
             'l': np.array([[0.5, 0.5j], [-0.5j, 0.5]], dtype=complex),
         }
-        if re.match(r'^[IXYZHST01rl\-+]+$', label) is None:
+        if re.match(r'^[IXYZHSTPM01rl\-+]+$', label) is None:
             raise QiskitError('Label contains invalid characters.')
         # Initialize an identity matrix and apply each gate
         num_qubits = len(label)
@@ -184,7 +186,7 @@ class Operator(BaseOperator):
 
         Args:
             other (Operator): an operator object.
-            qargs (list): a list of subsystem positions to compose other on.
+            qargs (list or None): a list of subsystem positions to apply on.
             front (bool): If False compose in standard order other(self(input))
                           otherwise compose in reverse order self(other(input))
                           [default: False]
@@ -283,11 +285,12 @@ class Operator(BaseOperator):
         data = np.kron(other._data, self._data)
         return Operator(data, input_dims, output_dims)
 
-    def add(self, other):
+    def add(self, other, qargs=None):
         """Return the operator self + other.
 
         Args:
             other (Operator): an operator object.
+            qargs (list or None): a list of subsystem positions to apply on.
 
         Returns:
             Operator: the operator self + other.
@@ -298,16 +301,18 @@ class Operator(BaseOperator):
         """
         if not isinstance(other, Operator):
             other = Operator(other)
+        other = self._pad_with_identity(other, qargs=qargs)
         if self.dim != other.dim:
             raise QiskitError("other operator has different dimensions.")
         return Operator(self.data + other.data, self.input_dims(),
                         self.output_dims())
 
-    def subtract(self, other):
+    def subtract(self, other, qargs=None):
         """Return the operator self - other.
 
         Args:
             other (Operator): an operator object.
+            qargs (list or None): a list of subsystem positions to apply on.
 
         Returns:
             Operator: the operator self - other.
@@ -318,6 +323,7 @@ class Operator(BaseOperator):
         """
         if not isinstance(other, Operator):
             other = Operator(other)
+        other = self._pad_with_identity(other, qargs=qargs)
         if self.dim != other.dim:
             raise QiskitError("other operator has different dimensions.")
         return Operator(self.data - other.data, self.input_dims(),
@@ -364,6 +370,21 @@ class Operator(BaseOperator):
             rtol = self._rtol
         return matrix_equal(self.data, other.data, ignore_phase=True,
                             rtol=rtol, atol=atol)
+
+    def round(self, decimals=0):
+        """Round an operator to the given number of decimals.
+
+        Args:
+            decimals (int): Number of decimal places to round to (default: 0).
+                If decimals is negative, it specifies the number of positions to
+                the left of the decimal point.
+
+        Returns:
+            Operator: the rounded operator.
+        """
+        return Operator(np.round(self.data, decimals=decimals),
+                        input_dims=self._input_dims,
+                        output_dims=self._output_dims)
 
     @property
     def _shape(self):
@@ -452,3 +473,18 @@ class Operator(BaseOperator):
                 else:
                     new_qargs = [qargs[tup.index] for tup in qregs]
                 self._append_instruction(instr, qargs=new_qargs)
+
+    def _pad_with_identity(self, other, qargs):
+        """Pad input operator with identites on other subsystems"""
+        # If qargs is None or all subsystems we don't need to pad
+        if qargs is None:
+            return other
+        if self._input_dims != self._output_dims:
+            raise ValueError("Cannot add on subsystem for non-square Operator.")
+        if qargs == list(range(len(self._input_dims))):
+            return other
+        # Otherwise we pad with identites on all other subsystems
+        padded = Operator(np.eye(self._input_dim),
+                          input_dims=self._input_dims,
+                          output_dims=self._output_dims)
+        return padded.compose(other, qargs=qargs)

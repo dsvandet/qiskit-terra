@@ -335,6 +335,25 @@ class Stinespring(QuantumChannel):
         return Stinespring((stine_l, stine_r), self.input_dims(),
                            self.output_dims())
 
+    def round(self, decimals=0):
+        """Round an operator to the given number of decimals.
+
+        Args:
+            decimals (int): Number of decimal places to round to (default: 0).
+                If decimals is negative, it specifies the number of positions to
+                the left of the decimal point.
+
+        Returns:
+            Stinespring: the rounded operator.
+        """
+        stine_l, stine_r = self._data
+        stine_l = np.round(stine_l, decimals=decimals)
+        if stine_r is not None:
+            stine_r = np.round(stine_r, decimals=decimals)
+        return Stinespring((stine_l, stine_r),
+                           input_dims=self._input_dims,
+                           output_dims=self._output_dims)
+
     def _evolve(self, state, qargs=None):
         """Evolve a quantum state by the quantum channel.
 
