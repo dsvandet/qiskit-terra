@@ -28,11 +28,24 @@ from qiskit.util import deprecate_arguments
 
 
 class XGate(Gate):
-    """Pauli X (bit-flip) gate."""
+    r"""Pauli X (bit-flip) gate.
 
-    def __init__(self, label=None):
+    **Matrix Definition**
+
+    The matrix for this gate is given by:
+
+    .. math::
+
+        U_{\text{X}} =
+            \begin{bmatrix}
+                0 & 1 \\
+                1 & 0
+            \end{bmatrix}
+    """
+
+    def __init__(self, phase=0, label=None):
         """Create new X gate."""
-        super().__init__('x', 1, [], label=label)
+        super().__init__('x', 1, [], phase=phase, label=label)
 
     def _define(self):
         """
@@ -41,14 +54,10 @@ class XGate(Gate):
         }
         """
         from qiskit.extensions.standard.u3 import U3Gate
-        definition = []
         q = QuantumRegister(1, 'q')
-        rule = [
-            (U3Gate(pi, 0, pi), [q[0]], [])
+        self.definition = [
+            (U3Gate(pi, 0, pi, phase=self.phase), [q[0]], [])
         ]
-        for inst in rule:
-            definition.append(inst)
-        self.definition = definition
 
     def control(self, num_ctrl_qubits=1, label=None, ctrl_state=None):
         """Controlled version of this gate.
@@ -63,18 +72,18 @@ class XGate(Gate):
             ControlledGate: controlled version of this gate.
         """
         if ctrl_state is None:
-            if num_ctrl_qubits == 1:
+            if num_ctrl_qubits == 1 and not self.phase:
                 return CXGate()
-            elif num_ctrl_qubits == 2:
+            elif num_ctrl_qubits == 2 and not self.phase:
                 return CCXGate()
         return super().control(num_ctrl_qubits=num_ctrl_qubits, label=label,
                                ctrl_state=ctrl_state)
 
     def inverse(self):
         """Invert this gate."""
-        return XGate()  # self-inverse
+        return XGate(phase=-self.phase)  # self-inverse
 
-    def to_matrix(self):
+    def _matrix_definition(self):
         """Return a numpy.array for the X gate."""
         return numpy.array([[0, 1],
                             [1, 0]], dtype=complex)
@@ -124,11 +133,30 @@ class CXMeta(type):
 
 
 class CXGate(ControlledGate, metaclass=CXMeta):
-    """The controlled-X gate."""
+    r"""The controlled-X gate.
 
-    def __init__(self):
+    **Matrix Definition**
+
+    The matrix for this gate is given by:
+
+    .. math::
+
+        U_{\text{CX}} =
+            I \otimes |0 \rangle\!\langle 0| +
+            U_{\text{X}} \otimes |1 \rangle\!\langle 1|
+            =
+            \begin{bmatrix}
+                1 & 0 & 0 & 0 \\
+                0 & 0 & 0 & 1 \\
+                0 & 0 & 1 & 0 \\
+                0 & 1 & 0 & 0
+            \end{bmatrix}
+    """
+
+    def __init__(self, phase=0, label=None):
         """Create new cx gate."""
-        super().__init__('cx', 2, [], num_ctrl_qubits=1)
+        super().__init__("cx", 2, [], phase=phase, label=label,
+                         num_ctrl_qubits=1)
         self.base_gate = XGate()
 
     def control(self, num_ctrl_qubits=1, label=None, ctrl_state=None):
@@ -145,15 +173,15 @@ class CXGate(ControlledGate, metaclass=CXMeta):
         """
         if ctrl_state is None:
             if num_ctrl_qubits == 1:
-                return CCXGate()
+                return CCXGate(phase=self.phase, label=label)
         return super().control(num_ctrl_qubits=num_ctrl_qubits, label=label,
                                ctrl_state=ctrl_state)
 
     def inverse(self):
         """Invert this gate."""
-        return CXGate()  # self-inverse
+        return CXGate(phase=-self.phase)  # self-inverse
 
-    def to_matrix(self):
+    def _matrix_definition(self):
         """Return a numpy.array for the CX gate."""
         return numpy.array([[1, 0, 0, 0],
                             [0, 0, 0, 1],
@@ -221,11 +249,35 @@ class CCXMeta(type):
 
 
 class CCXGate(ControlledGate, metaclass=CCXMeta):
-    """The double-controlled-not gate, also called Toffoli gate."""
+    r"""The double-controlled-not gate, also called Toffoli gate.
 
-    def __init__(self):
+    **Matrix Definition**
+
+    The matrix for this gate is given by:
+
+    .. math::
+
+        U_{\text{CX}} =&
+            I \otimes |0, 0 \rangle\!\langle 0, 0| +
+            I \otimes |0, 1 \rangle\!\langle 0, 1| +
+            I \otimes |1, 0 \rangle\!\langle 1, 0| +
+            U_{\text{X}} \otimes |1, 1 \rangle\!\langle 1, 1| \\
+            =&
+            \begin{bmatrix}
+                1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+                0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+                0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
+                0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 \\
+                0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+                0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 \\
+                0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 \\
+                0 & 0 & 0 & 1 & 0 & 0 & 0 & 0
+            \end{bmatrix}
+    """
+    def __init__(self,  phase=0, label=None):
         """Create new CCX gate."""
-        super().__init__('ccx', 3, [], num_ctrl_qubits=2)
+        super().__init__("ccx", 3, [],  phase=0, label=None,
+                         num_ctrl_qubits=2)
         self.base_gate = XGate()
 
     def _define(self):
@@ -237,10 +289,9 @@ class CCXGate(ControlledGate, metaclass=CCXMeta):
         t b; t c; h c; cx a,b;
         t a; tdg b; cx a,b;}
         """
-        definition = []
         q = QuantumRegister(3, 'q')
-        rule = [
-            (HGate(), [q[2]], []),
+        self.definition = [
+            (HGate(phase=self.phase), [q[2]], []),
             (CXGate(), [q[1], q[2]], []),
             (TdgGate(), [q[2]], []),
             (CXGate(), [q[0], q[2]], []),
@@ -256,15 +307,12 @@ class CCXGate(ControlledGate, metaclass=CCXMeta):
             (TdgGate(), [q[1]], []),
             (CXGate(), [q[0], q[1]], [])
         ]
-        for inst in rule:
-            definition.append(inst)
-        self.definition = definition
 
     def inverse(self):
         """Invert this gate."""
-        return CCXGate()  # self-inverse
+        return CCXGate(phase=-self.phase)  # self-inverse
 
-    def to_matrix(self):
+    def _matrix_definition(self):
         """Return a numpy.array for the CCX gate."""
         return numpy.array([[1, 0, 0, 0, 0, 0, 0, 0],
                             [0, 1, 0, 0, 0, 0, 0, 0],

@@ -25,22 +25,31 @@ from qiskit.util import deprecate_arguments
 
 
 class YGate(Gate):
-    """Pauli Y (bit-phase-flip) gate."""
+    r"""Pauli Y (bit-phase-flip) gate.
 
-    def __init__(self, label=None):
+    **Matrix Definition**
+
+    The matrix for this gate is given by:
+
+    .. math::
+
+        U_{\text{Z}} =
+            \begin{bmatrix}
+                0 & -i \\
+                i & 0
+            \end{bmatrix}
+    """
+
+    def __init__(self, phase=0, label=None):
         """Create new Y gate."""
-        super().__init__('y', 1, [], label=label)
+        super().__init__('y', 1, [], phase=phase, label=label)
 
     def _define(self):
         from qiskit.extensions.standard.u3 import U3Gate
-        definition = []
         q = QuantumRegister(1, 'q')
-        rule = [
-            (U3Gate(pi, pi / 2, pi / 2), [q[0]], [])
+        self.definition = [
+            (U3Gate(pi, pi/2, pi/2, phase=self.phase), [q[0]], [])
         ]
-        for inst in rule:
-            definition.append(inst)
-        self.definition = definition
 
     def control(self, num_ctrl_qubits=1, label=None, ctrl_state=None):
         """Controlled version of this gate.
@@ -55,16 +64,16 @@ class YGate(Gate):
             ControlledGate: controlled version of this gate.
         """
         if ctrl_state is None:
-            if num_ctrl_qubits == 1:
+            if num_ctrl_qubits == 1 and not self.phase:
                 return CYGate()
         return super().control(num_ctrl_qubits=num_ctrl_qubits, label=label,
                                ctrl_state=ctrl_state)
 
     def inverse(self):
         """Invert this gate."""
-        return YGate()  # self-inverse
+        return YGate(phase=-self.phase)  # self-inverse
 
-    def to_matrix(self):
+    def _matrix_definition(self):
         """Return a numpy.array for the Y gate."""
         return numpy.array([[0, -1j],
                             [1j, 0]], dtype=complex)
@@ -114,11 +123,30 @@ class CYMeta(type):
 
 
 class CYGate(ControlledGate, metaclass=CYMeta):
-    """The controlled-Y gate."""
+    r"""The controlled-Y gate.
 
-    def __init__(self):
-        """Create a new CY gate."""
-        super().__init__('cy', 2, [], num_ctrl_qubits=1)
+    **Matrix Definition**
+
+    The matrix for this gate is given by:
+
+    .. math::
+
+        U_{\text{CT}} =
+            I \otimes |0 \rangle\!\langle 0| +
+            U_{\text{Y}} \otimes |1 \rangle\!\langle 1|
+            =
+            \begin{bmatrix}
+                1 & 0 & 0 & 0 \\
+                0 & 0 & 0 & -i \\
+                0 & 0 & 1 & 0 \\
+                0 & i & 0 & 0
+            \end{bmatrix}
+    """
+
+    def __init__(self, phase=0, label=None):
+        """Create new CY gate."""
+        super().__init__('cy', 2, [],  phase=0, label=None,
+                         num_ctrl_qubits=1)
         self.base_gate = YGate()
 
     def _define(self):
@@ -128,22 +156,18 @@ class CYGate(ControlledGate, metaclass=CYMeta):
         from qiskit.extensions.standard.s import SGate
         from qiskit.extensions.standard.s import SdgGate
         from qiskit.extensions.standard.x import CXGate
-        definition = []
         q = QuantumRegister(2, 'q')
-        rule = [
-            (SdgGate(), [q[1]], []),
+        self.definition = [
+            (SdgGate(phase=self.phase), [q[1]], []),
             (CXGate(), [q[0], q[1]], []),
             (SGate(), [q[1]], [])
         ]
-        for inst in rule:
-            definition.append(inst)
-        self.definition = definition
 
     def inverse(self):
         """Invert this gate."""
-        return CYGate()  # self-inverse
+        return CYGate(phase=-self.phase)  # self-inverse
 
-    def to_matrix(self):
+    def _matrix_definition(self):
         """Return a numpy.array for the CY gate."""
         return numpy.array([[1, 0, 0, 0],
                             [0, 0, 0, -1j],

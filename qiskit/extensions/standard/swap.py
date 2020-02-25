@@ -24,27 +24,39 @@ from qiskit.util import deprecate_arguments
 
 
 class SwapGate(Gate):
-    """SWAP gate."""
+    r"""Swap gate.
 
-    def __init__(self):
-        """Create new SWAP gate."""
-        super().__init__('swap', 2, [])
+    **Matrix Definition**
+
+    The matrix for this gate is given by:
+
+    .. math::
+
+        U_{\text{Swap}}
+            = \begin{bmatrix}
+                1 & 0 & 0 & 0 \\
+                0 & 0 & 1 & 0 \\
+                0 & 1 & 0 & 0 \\
+                0 & 0 & 0 & 1
+            \end{bmatrix}
+    """
+
+    def __init__(self, phase=0, label=None):
+        """Create new Swap gate."""
+        super().__init__("swap", 2, [],
+                         phase=phase, label=label)
 
     def _define(self):
         """
         gate swap a,b { cx a,b; cx b,a; cx a,b; }
         """
         from qiskit.extensions.standard.x import CXGate
-        definition = []
         q = QuantumRegister(2, 'q')
-        rule = [
-            (CXGate(), [q[0], q[1]], []),
+        self.definition = [
+            (CXGate(phase=self.phase), [q[0], q[1]], []),
             (CXGate(), [q[1], q[0]], []),
             (CXGate(), [q[0], q[1]], [])
         ]
-        for inst in rule:
-            definition.append(inst)
-        self.definition = definition
 
     def control(self, num_ctrl_qubits=1, label=None, ctrl_state=None):
         """Controlled version of this gate.
@@ -66,9 +78,9 @@ class SwapGate(Gate):
 
     def inverse(self):
         """Invert this gate."""
-        return SwapGate()  # self-inverse
+        return SwapGate(phase=-self.phase)  # self-inverse
 
-    def to_matrix(self):
+    def _matrix_definition(self):
         """Return a numpy.array for the SWAP gate."""
         return numpy.array([[1, 0, 0, 0],
                             [0, 0, 1, 0],
@@ -116,11 +128,33 @@ class CSwapMeta(type):
 
 
 class CSwapGate(ControlledGate, metaclass=CSwapMeta):
-    """The controlled-swap gate, also called Fredkin gate."""
+    r"""The controlled-swap gate, also called Fredkin gate.
 
-    def __init__(self):
-        """Create new CSWAP gate."""
-        super().__init__('cswap', 3, [], num_ctrl_qubits=1)
+    **Matrix Definition**
+
+    The matrix for this gate is given by:
+
+    .. math::
+
+        U_{\text{CSwap}} =&
+            I \otimes |0 \rangle\!\langle 0| +
+            U_{\text{Swap}} \otimes |1 \rangle\!\langle 1| \\
+            =&
+            \begin{bmatrix}
+                1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+                0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+                0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
+                0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 \\
+                0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+                0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+                0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 \\
+                0 & 0 & 0 & 0 & 0 & 0 & 0 & 1
+            \end{bmatrix}
+    """
+    def __init__(self, phase=0, label=None):
+        """Create new CSwap gate."""
+        super().__init__("cswap", 3, [], phase=0, label=None,
+                         num_ctrl_qubits=1)
         self.base_gate = SwapGate()
 
     def _define(self):
@@ -133,22 +167,18 @@ class CSwapGate(ControlledGate, metaclass=CSwapMeta):
         """
         from qiskit.extensions.standard.x import CXGate
         from qiskit.extensions.standard.x import CCXGate
-        definition = []
         q = QuantumRegister(3, 'q')
-        rule = [
-            (CXGate(), [q[2], q[1]], []),
+        self.definition = [
+            (CXGate(phase=self.phase), [q[2], q[1]], []),
             (CCXGate(), [q[0], q[1], q[2]], []),
             (CXGate(), [q[2], q[1]], [])
         ]
-        for inst in rule:
-            definition.append(inst)
-        self.definition = definition
 
     def inverse(self):
         """Invert this gate."""
-        return CSwapGate()  # self-inverse
+        return CSwapGate(phase=-self.phase)  # self-inverse
 
-    def to_matrix(self):
+    def _matrix_definition(self):
         """Return a numpy.array for the Fredkin (CSWAP) gate."""
         return numpy.array([[1, 0, 0, 0, 0, 0, 0, 0],
                             [0, 1, 0, 0, 0, 0, 0, 0],
