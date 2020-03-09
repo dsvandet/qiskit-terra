@@ -19,6 +19,7 @@ Abstract BaseOperator class.
 import copy
 import warnings
 from abc import ABC, abstractmethod
+from numbers import Number
 
 import numpy as np
 
@@ -210,6 +211,31 @@ class BaseOperator(ABC):
         pass
 
     @abstractmethod
+    def append(self, other, qargs=None, front=False):
+        """Compose the current operator inplace.
+
+        Functions like the :meth:`compose` method, but updates the current
+        object in place.
+
+        Args:
+            other (BaseOperator): an operator object.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+            front (bool): If True compose using right operator multiplication,
+                          instead of left multiplication [default: False].
+
+         Returns:
+            BaseOperator: Self updated to self @ other if `front=False`,
+                          or updated to other @ self if `front=True`.
+
+        Raise:
+            QiskitError: if operators have incompatible dimensions for
+                         composition.
+        """
+        pass
+
+    @abstractmethod
     def compose(self, other, qargs=None, front=False):
         """Return the composed operator.
 
@@ -222,7 +248,8 @@ class BaseOperator(ABC):
                           instead of left multiplication [default: False].
 
         Returns:
-            BaseOperator: The operator self @ other.
+            BaseOperator: The operator self @ other if `front=False`,
+                          the operator other @ self if `front=True`.
 
         Raises:
             QiskitError: if other cannot be converted to an operator, or has
@@ -378,8 +405,8 @@ class BaseOperator(ABC):
         self._output_dims = tuple(output_dims)
         # The total input and output dimensions are given by the product
         # of all subsystem dimension in the input_dims/output_dims.
-        self._input_dim = np.product(input_dims)
-        self._output_dim = np.product(output_dims)
+        self._input_dim = int(np.product(input_dims))
+        self._output_dim = int(np.product(output_dims))
 
     def _get_compose_dims(self, other, qargs, front):
         """Check dimensions are compatible for composition.
@@ -452,6 +479,9 @@ class BaseOperator(ABC):
     # Overloads
     def __matmul__(self, other):
         return self.compose(other)
+
+    def __imatmul__(self, other):
+        return self.append(other)
 
     def __mul__(self, other):
         return self.dot(other)
