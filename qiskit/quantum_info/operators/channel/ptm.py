@@ -107,7 +107,7 @@ class PTM(QuantumChannel):
             if isinstance(data, (QuantumCircuit, Instruction)):
                 # If the input is a Terra QuantumCircuit or Instruction we
                 # convert it to a SuperOp
-                data = SuperOp._init_instruction(data)
+                data = SuperOp.from_instruction(data)
             else:
                 # We use the QuantumChannel init transform to initialize
                 # other objects into a QuantumChannel or Operator object.
@@ -148,45 +148,6 @@ class PTM(QuantumChannel):
         # to the SuperOp representation to compute the
         # conjugate channel
         return PTM(SuperOp(self).transpose())
-
-    def compose(self, other, qargs=None, front=False):
-        """Return the composed quantum channel self @ other.
-
-        Args:
-            other (QuantumChannel): a quantum channel.
-            qargs (list or None): a list of subsystem positions to apply
-                                  other on. If None apply on all
-                                  subsystems [default: None].
-            front (bool): If True compose using right operator multiplication,
-                          instead of left multiplication [default: False].
-
-        Returns:
-            PTM: The quantum channel self @ other.
-
-        Raises:
-            QiskitError: if other has incompatible dimensions.
-
-        Additional Information:
-            Composition (``@``) is defined as `left` matrix multiplication for
-            :class:`SuperOp` matrices. That is that ``A @ B`` is equal to ``B * A``.
-            Setting ``front=True`` returns `right` matrix multiplication
-            ``A * B`` and is equivalent to the :meth:`dot` method.
-        """
-        if qargs is None:
-            qargs = getattr(other, 'qargs', None)
-        if qargs is not None:
-            return PTM(
-                SuperOp(self).compose(other, qargs=qargs, front=front))
-
-        # Convert other to PTM
-        if not isinstance(other, PTM):
-            other = PTM(other)
-        input_dims, output_dims = self._get_compose_dims(other, qargs, front)
-        if front:
-            data = np.dot(self._data, other.data)
-        else:
-            data = np.dot(other.data, self._data)
-        return PTM(data, input_dims, output_dims)
 
     def power(self, n):
         """The matrix power of the channel.
@@ -242,6 +203,57 @@ class PTM(QuantumChannel):
         output_dims = self.output_dims() + other.output_dims()
         data = np.kron(other.data, self._data)
         return PTM(data, input_dims, output_dims)
+
+    def _compose(self, other, qargs=None, front=False, inplace=False):
+        """Return the composed quantum channel self @ other.
+
+        Args:
+            other (QuantumChannel): a quantum channel.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+            front (bool): If True compose using right operator multiplication,
+                          instead of left multiplication [default: False].
+            inplace (bool): update current object inplace [Default: False].
+
+        Returns:
+            PTM: The quantum channel self @ other.
+
+        Raises:
+            QiskitError: if other has incompatible dimensions.
+        """
+        if qargs is None:
+            qargs = getattr(other, 'qargs', None)
+
+        if qargs is not None:
+            # Convert via SuperOp representation
+            tmp = PTM(SuperOp(self)._compose(
+                other, qargs=qargs, front=front, inplace=True))
+
+            if not inplace:
+                return tmp
+
+            self._data = tmp._data
+            self._set_dims(tmp._input_dims, tmp._output_dims)
+            return self
+
+        # For full composition we don't need to convert representations
+        if not isinstance(other, PTM):
+            other = PTM(other)
+
+        input_dims, output_dims = self._get_compose_dims(
+            other, qargs, front)
+
+        first = self._data if front else other._data
+        second = other._data if front else self._data
+
+        if inplace:
+            np.dot(first, second, out=self._data)
+            self._set_dims(input_dims, output_dims)
+            return self
+
+        return PTM(np.dot(first, second),
+                   input_dims=input_dims, output_dims=output_dims)
 
     def _evolve(self, state, qargs=None):
         """Evolve a quantum state by the quantum channel.

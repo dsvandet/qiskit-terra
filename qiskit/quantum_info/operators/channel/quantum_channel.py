@@ -74,9 +74,32 @@ class QuantumChannel(BaseOperator):
         """Return data."""
         return self._data
 
-    @abstractmethod
+    def append(self, other, qargs=None, front=False):
+        """Compose the current quantum channel inplace.
+
+        Functions like the :meth:`compose` method, but updates the current
+        object in place.
+
+        Args:
+            other (QuantumChannel): a quantum channel.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+            front (bool): If True compose using right operator multiplication,
+                          instead of left multiplication [default: False].
+
+         Returns:
+            QuantumChannel: The quantum channel self @ other if `front=False`,
+                            the quantum channel other @ self if `front=True`.
+
+        Raise:
+            QiskitError: if operators have incompatible dimensions for
+                         composition.
+        """
+        return self._compose(other, qargs=qargs, front=front, inplace=True)
+
     def compose(self, other, qargs=None, front=False):
-        """Return the composed quantum channel self @ other.
+        """Return the composed quantum channel.
 
         Args:
             other (QuantumChannel): a quantum channel.
@@ -87,16 +110,57 @@ class QuantumChannel(BaseOperator):
                           instead of left multiplication [default: False].
 
         Returns:
+            QuantumChannel: The quantum channel self @ other if `front=False`,
+                            the quantum channel other @ self if `front=True`.
+
+        Raise:
+            QiskitError: if operators have incompatible dimensions for
+                         composition.
+
+        Additional Information:
+            Composition (``@``) is defined as `left` matrix multiplication for
+            matrix operators. That is that ``A @ B`` is equal to ``B * A``.
+            Setting ``front=True`` returns `right` matrix multiplication
+            ``A * B`` and is equivalent to the :meth:`dot` method.
+        """
+        return self._compose(other, qargs=qargs, front=front)
+
+    def dot(self, other, qargs=None):
+        """Return the right multiplied quantum channel self * other.
+
+        Args:
+            other (QuantumChannel): a quantum channel.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+
+        Returns:
+            QuantumChannel: The quantum channel self * other.
+
+        Raises:
+            QiskitError: if operators have incompatible dimensions for
+                         composition.
+        """
+        return self._compose(other, qargs=qargs, front=True)
+
+    @abstractmethod
+    def _compose(self, other, qargs=None, front=False, inplace=False):
+        """Return the composed quantum channel self @ other.
+
+        Args:
+            other (QuantumChannel): a quantum channel.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+            front (bool): If True compose using right operator multiplication,
+                          instead of left multiplication [default: False].
+            inplace (bool): update current object inplace [Default: False].
+
+        Returns:
             QuantumChannel: The quantum channel self @ other.
 
         Raises:
             QiskitError: if other has incompatible dimensions.
-
-        Additional Information:
-            Composition (``@``) is defined as `left` matrix multiplication for
-            :class:`SuperOp` matrices. That is that ``A @ B`` is equal to ``B * A``.
-            Setting ``front=True`` returns `right` matrix multiplication
-            ``A * B`` and is equivalent to the :meth:`dot` method.
         """
         pass
 

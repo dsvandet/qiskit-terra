@@ -111,7 +111,7 @@ class Choi(QuantumChannel):
             if isinstance(data, (QuantumCircuit, Instruction)):
                 # If the input is a Terra QuantumCircuit or Instruction we
                 # convert it to a SuperOp
-                data = SuperOp._init_instruction(data)
+                data = SuperOp.from_instruction(data)
             else:
                 # We use the QuantumChannel init transform to initialize
                 # other objects into a QuantumChannel or Operator object.
@@ -151,53 +151,6 @@ class Choi(QuantumChannel):
         return Choi(data,
                     input_dims=self.output_dims(),
                     output_dims=self.input_dims())
-
-    def compose(self, other, qargs=None, front=False):
-        """Return the composed quantum channel self @ other.
-
-        Args:
-            other (QuantumChannel): a quantum channel.
-            qargs (list or None): a list of subsystem positions to apply
-                                  other on. If None apply on all
-                                  subsystems [default: None].
-            front (bool): If True compose using right operator multiplication,
-                          instead of left multiplication [default: False].
-
-        Returns:
-            Choi: The quantum channel self @ other.
-
-        Raises:
-            QiskitError: if other has incompatible dimensions.
-
-        Additional Information:
-            Composition (``@``) is defined as `left` matrix multiplication for
-            :class:`SuperOp` matrices. That is that ``A @ B`` is equal to ``B * A``.
-            Setting ``front=True`` returns `right` matrix multiplication
-            ``A * B`` and is equivalent to the :meth:`dot` method.
-        """
-        if qargs is None:
-            qargs = getattr(other, 'qargs', None)
-        if qargs is not None:
-            return Choi(
-                SuperOp(self).compose(other, qargs=qargs, front=front))
-
-        if not isinstance(other, Choi):
-            other = Choi(other)
-        input_dims, output_dims = self._get_compose_dims(other, qargs, front)
-        input_dim = np.product(input_dims)
-        output_dim = np.product(output_dims)
-
-        if front:
-            first = np.reshape(other._data, other._bipartite_shape)
-            second = np.reshape(self._data, self._bipartite_shape)
-        else:
-            first = np.reshape(self._data, self._bipartite_shape)
-            second = np.reshape(other._data, other._bipartite_shape)
-
-        # Contract Choi matrices for composition
-        data = np.reshape(np.einsum('iAjB,AkBl->ikjl', first, second),
-                          (input_dim * output_dim, input_dim * output_dim))
-        return Choi(data, input_dims, output_dims)
 
     def power(self, n):
         """The matrix power of the channel.
@@ -262,6 +215,66 @@ class Choi(QuantumChannel):
                                  self._data,
                                  shape1=other._bipartite_shape,
                                  shape2=self._bipartite_shape)
+        return Choi(data, input_dims, output_dims)
+
+    def _compose(self, other, qargs=None, front=False, inplace=False):
+        """Return the composed quantum channel self @ other.
+
+        Args:
+            other (QuantumChannel): a quantum channel.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+            front (bool): If True compose using right operator multiplication,
+                          instead of left multiplication [default: False].
+            inplace (bool): update current object inplace [Default: False].
+
+        Returns:
+            Choi: The quantum channel self @ other.
+
+        Raises:
+            QiskitError: if other has incompatible dimensions.
+        """
+        if qargs is None:
+            qargs = getattr(other, 'qargs', None)
+
+        if qargs is not None:
+            # Convert via SuperOp representation
+            tmp = Choi(SuperOp(self)._compose(
+                other, qargs=qargs, front=front, inplace=True))
+
+            if inplace:
+                self._data = tmp._data
+                self._set_dims(tmp._input_dims, tmp._output_dims)
+                return self
+
+            return tmp
+
+        if not isinstance(other, Choi):
+            other = Choi(other)
+
+        input_dims, output_dims = self._get_compose_dims(
+            other, qargs, front)
+
+        input_dim = np.product(input_dims)
+        output_dim = np.product(output_dims)
+        final_shape = (input_dim * output_dim, input_dim * output_dim)
+
+        if front:
+            first = np.reshape(other._data, other._bipartite_shape)
+            second = np.reshape(self._data, self._bipartite_shape)
+        else:
+            first = np.reshape(self._data, self._bipartite_shape)
+            second = np.reshape(other._data, other._bipartite_shape)
+
+        # Contract Choi matrices for composition
+        data = np.reshape(np.einsum('iAjB,AkBl->ikjl', first, second),
+                          final_shape)
+        if inplace:
+            self._data = data
+            self._set_dims(input_dims, output_dims)
+            return self
+
         return Choi(data, input_dims, output_dims)
 
     def _evolve(self, state, qargs=None):

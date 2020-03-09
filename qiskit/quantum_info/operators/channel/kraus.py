@@ -144,7 +144,7 @@ class Kraus(QuantumChannel):
             if isinstance(data, (QuantumCircuit, Instruction)):
                 # If the input is a Terra QuantumCircuit or Instruction we
                 # convert it to a SuperOp
-                data = SuperOp._init_instruction(data)
+                data = SuperOp.from_instruction(data)
             else:
                 # We use the QuantumChannel init transform to initialize
                 # other objects into a QuantumChannel or Operator object.
@@ -212,76 +212,6 @@ class Kraus(QuantumChannel):
         return Kraus((kraus_l, kraus_r),
                      input_dims=self.output_dims(),
                      output_dims=self.input_dims())
-
-    def compose(self, other, qargs=None, front=False):
-        """Return the composed quantum channel self @ other.
-
-        Args:
-            other (QuantumChannel): a quantum channel.
-            qargs (list or None): a list of subsystem positions to apply
-                                  other on. If None apply on all
-                                  subsystems [default: None].
-            front (bool): If True compose using right operator multiplication,
-                          instead of left multiplication [default: False].
-
-        Returns:
-            Kraus: The quantum channel self @ other.
-
-        Raises:
-            QiskitError: if other cannot be converted to a Kraus or has
-            incompatible dimensions.
-
-        Additional Information:
-            Composition (``@``) is defined as `left` matrix multiplication for
-            :class:`SuperOp` matrices. That is that ``A @ B`` is equal to ``B * A``.
-            Setting ``front=True`` returns `right` matrix multiplication
-            ``A * B`` and is equivalent to the :meth:`dot` method.
-        """
-        if qargs is None:
-            qargs = getattr(other, 'qargs', None)
-        if qargs is not None:
-            return Kraus(
-                SuperOp(self).compose(other, qargs=qargs, front=front))
-
-        if not isinstance(other, Kraus):
-            other = Kraus(other)
-        input_dims, output_dims = self._get_compose_dims(other, qargs, front)
-
-        if front:
-            ka_l, ka_r = self._data
-            kb_l, kb_r = other._data
-        else:
-            ka_l, ka_r = other._data
-            kb_l, kb_r = self._data
-
-        kab_l = [np.dot(a, b) for a in ka_l for b in kb_l]
-        if ka_r is None and kb_r is None:
-            kab_r = None
-        elif ka_r is None:
-            kab_r = [np.dot(a, b) for a in ka_l for b in kb_r]
-        elif kb_r is None:
-            kab_r = [np.dot(a, b) for a in ka_r for b in kb_l]
-        else:
-            kab_r = [np.dot(a, b) for a in ka_r for b in kb_r]
-        return Kraus((kab_l, kab_r), input_dims, output_dims)
-
-    def dot(self, other, qargs=None):
-        """Return the right multiplied quantum channel self * other.
-
-        Args:
-            other (QuantumChannel): a quantum channel.
-            qargs (list or None): a list of subsystem positions to apply
-                                  other on. If None apply on all
-                                  subsystems [default: None].
-
-        Returns:
-            Kraus: The quantum channel self * other.
-
-        Raises:
-            QiskitError: if other cannot be converted to a Kraus or has
-            incompatible dimensions.
-        """
-        return super().dot(other, qargs=qargs)
 
     def power(self, n):
         """The matrix power of the channel.
@@ -375,6 +305,73 @@ class Kraus(QuantumChannel):
         if self._data[1] is not None:
             kraus_r = [val * k for k in self._data[1]]
         return Kraus((kraus_l, kraus_r), self._input_dim, self._output_dim)
+
+    def _compose(self, other, qargs=None, front=False, inplace=False):
+        """Return the composed quantum channel self @ other.
+
+        Args:
+            other (QuantumChannel): a quantum channel.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+            front (bool): If True compose using right operator multiplication,
+                          instead of left multiplication [default: False].
+            inplace (bool): update current object inplace [Default: False].
+
+        Returns:
+            Kraus: The quantum channel self @ other.
+
+        Raises:
+            QiskitError: if other has incompatible dimensions.
+        """
+        if qargs is None:
+            qargs = getattr(other, 'qargs', None)
+
+        if qargs is not None:
+            # We compose using conversion to SuperOp and back to Stinespring
+            tmp = Kraus(SuperOp(self)._compose(
+                other, qargs=qargs, front=front, inplace=True))
+
+            if inplace:
+                self._data = tmp._data
+                self._set_dims(tmp._input_dim, tmp._output_dim)
+                return self
+
+            return tmp
+
+        # If we are composing on the full statespace we can perform
+        # the composition directly in the Kraus representation
+        if not isinstance(other, Kraus):
+            other = Kraus(other)
+
+        input_dims, output_dims = self._get_compose_dims(
+            other, qargs, front)
+
+        if front:
+            ka_l, ka_r = self._data
+            kb_l, kb_r = other._data
+        else:
+            ka_l, ka_r = other._data
+            kb_l, kb_r = self._data
+
+        kab_l = [np.dot(a, b) for a in ka_l for b in kb_l]
+        if ka_r is None and kb_r is None:
+            kab_r = None
+        elif ka_r is None:
+            kab_r = [np.dot(a, b) for a in ka_l for b in kb_r]
+        elif kb_r is None:
+            kab_r = [np.dot(a, b) for a in ka_r for b in kb_l]
+        else:
+            kab_r = [np.dot(a, b) for a in ka_r for b in kb_r]
+
+        if inplace:
+            self._data = (kab_l, kab_r)
+            self._set_dims(input_dims, output_dims)
+            return self
+
+        return Kraus((kab_l, kab_r),
+                     input_dims=input_dims,
+                     output_dims=output_dims)
 
     def _evolve(self, state, qargs=None):
         """Evolve a quantum state by the quantum channel.
