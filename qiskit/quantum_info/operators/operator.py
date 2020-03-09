@@ -83,13 +83,13 @@ class Operator(BaseOperator):
             # 'to_matrix' method defined. Any other instructions such as
             # conditional gates, measure, or reset will cause an
             # exception to be raised.
-            self._data = self._init_instruction(data).data
+            self._data = self.from_instruction(data)._data
         elif hasattr(data, 'to_operator'):
             # If the data object has a 'to_operator' attribute this is given
             # higher preference than the 'to_matrix' method for initializing
             # an Operator object.
             data = data.to_operator()
-            self._data = data.data
+            self._data = data._data
             if input_dims is None:
                 input_dims = data._input_dims
             if output_dims is None:
@@ -123,8 +123,8 @@ class Operator(BaseOperator):
         """Return data."""
         return self._data
 
-    @classmethod
-    def from_label(cls, label):
+    @staticmethod
+    def from_label(label):
         """Return a tensor product of single-qubit operators.
 
         Args:
@@ -154,7 +154,7 @@ class Operator(BaseOperator):
             'l': [[0.5, 0.5j], [-0.5j , 0.5]]
         """
         # Check label is valid
-        label_mats = {
+        label_ops = {
             'I': IGate().to_matrix(),
             'X': XGate().to_matrix(),
             'Y': YGate().to_matrix(),
@@ -169,15 +169,35 @@ class Operator(BaseOperator):
             'r': np.array([[0.5, -0.5j], [0.5j, 0.5]], dtype=complex),
             'l': np.array([[0.5, 0.5j], [-0.5j, 0.5]], dtype=complex),
         }
+
+        # Check all characters are valid
         if re.match(r'^[IXYZHST01rl\-+]+$', label) is None:
             raise QiskitError('Label contains invalid characters.')
-        # Initialize an identity matrix and apply each gate
-        num_qubits = len(label)
-        op = Operator(np.eye(2 ** num_qubits, dtype=complex))
-        for qubit, char in enumerate(reversed(label)):
-            if char != 'I':
-                op = op.compose(label_mats[char], qargs=[qubit])
-        return op
+
+        # To improve efficiency look for multi-qubit identity at
+        # front or back of string since this can be directly initialized
+        # using Numpy.eye
+        n_front_id = 0
+        front = re.search(r'^[I]+', label)
+        if front is not None:
+            n_front_id = front.span()[1]
+
+        n_back_id = 0
+        if n_front_id != len(label):
+            back = re.search(r'[I]+$', label)
+            if back is not None:
+                span = back.span()
+                n_back_id = span[1] - span[0]
+
+        # Initialize leading identity
+        mat = np.eye(2 ** n_front_id, dtype=complex)
+        # Iteratate over substring removing front and back identities
+        for name in label[n_front_id:len(label)-n_back_id]:
+            mat = np.kron(mat, label_ops[name])
+        # Add back identity
+        if n_back_id:
+            mat = np.kron(mat, np.eye(2 ** n_back_id, dtype=complex))
+        return Operator(mat)
 
     def is_unitary(self, atol=None, rtol=None):
         """Return True if operator is a unitary matrix."""
@@ -213,6 +233,29 @@ class Operator(BaseOperator):
         ret._set_dims(self._output_dims, self._input_dims)
         return ret
 
+    def append(self, other, qargs=None, front=False):
+        """Compose the current operator inplace.
+
+        Functions like the :meth:`compose` method, but updates the current
+        object in place.
+
+        Args:
+            other (Operator): an operator object.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+            front (bool): If True compose using right operator multiplication,
+                          instead of left multiplication [default: False].
+
+         Returns:
+            Operator: The current operator updated to store self @ other.
+
+        Raise:
+            QiskitError: if operators have incompatible dimensions for
+                         composition.
+        """
+        return self._compose(other, qargs=qargs, front=front, inplace=True)
+
     def compose(self, other, qargs=None, front=False):
         """Return the composed operator.
 
@@ -237,47 +280,7 @@ class Operator(BaseOperator):
             Setting ``front=True`` returns `right` matrix multiplication
             ``A * B`` and is equivalent to the :meth:`dot` method.
         """
-        if qargs is None:
-            qargs = getattr(other, 'qargs', None)
-        if not isinstance(other, Operator):
-            other = Operator(other)
-        # Validate dimensions are compatible and return the composed
-        # operator dimensions
-        input_dims, output_dims = self._get_compose_dims(
-            other, qargs, front)
-
-        # Full composition of operators
-        if qargs is None:
-            if front:
-                # Composition self * other
-                data = np.dot(self._data, other.data)
-            else:
-                # Composition other * self
-                data = np.dot(other.data, self._data)
-            return Operator(data, input_dims, output_dims)
-
-        # Compose with other on subsystem
-        if front:
-            num_indices = len(self._input_dims)
-            shift = len(self._output_dims)
-            right_mul = True
-        else:
-            num_indices = len(self._output_dims)
-            shift = 0
-            right_mul = False
-
-        # Reshape current matrix
-        # Note that we must reverse the subsystem dimension order as
-        # qubit 0 corresponds to the right-most position in the tensor
-        # product, which is the last tensor wire index.
-        tensor = np.reshape(self.data, self._shape)
-        mat = np.reshape(other.data, other._shape)
-        indices = [num_indices - 1 - qubit for qubit in qargs]
-        final_shape = [np.product(output_dims), np.product(input_dims)]
-        data = np.reshape(
-            Operator._einsum_matmul(tensor, mat, indices, shift, right_mul),
-            final_shape)
-        return Operator(data, input_dims, output_dims)
+        return self._compose(other, qargs=qargs, front=front)
 
     def dot(self, other, qargs=None):
         """Return the right multiplied operator self * other.
@@ -295,7 +298,7 @@ class Operator(BaseOperator):
             QiskitError: if other cannot be converted to an Operator or has
             incompatible dimensions.
         """
-        return super().dot(other, qargs=qargs)
+        return self._compose(other, qargs=qargs, front=True)
 
     def power(self, n):
         """Return the matrix power of the operator.
@@ -421,14 +424,121 @@ class Operator(BaseOperator):
         return matrix_equal(self.data, other.data, ignore_phase=True,
                             rtol=rtol, atol=atol)
 
+    def _compose(self, other, qargs=None, front=False, inplace=False):
+        """Return the composed operator.
+
+        Args:
+            other (Operator): an operator object.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+            front (bool): If True compose using right operator multiplication,
+                          instead of left multiplication [default: False].
+            inplace (bool): update current object inplace [Default: False].
+
+        Returns:
+            Operator: The operator self @ other.
+
+        Raise:
+            QiskitError: if operators have incompatible dimensions for
+                         composition.
+        """
+        if qargs is None:
+            qargs = getattr(other, 'qargs', None)
+
+        if not isinstance(other, Operator):
+            other = Operator(other)
+
+        if qargs is None:
+            return self._compose_full(other, front=front, inplace=inplace)
+        return self._compose_qargs(
+            other, qargs, front=front, inplace=inplace)
+
+    def _compose_full(self, other, front=False, inplace=False):
+        """Composition without qargs helper function"""
+        # Validate dimensions are compatible and return the composed
+        # operator dimensions
+        input_dims, output_dims = self._get_compose_dims(
+            other, None, front)
+
+        # Choose order for composition
+        first = self._data if front else other._data
+        second = other._data if front else self._data
+
+        # Make the return variable either the current operator or
+        # a shallow copy of the current operator
+        ret = self if inplace else copy.copy(self)
+
+        # If dimensions are unchanged by composition we can perform
+        # inplace composition more efficiently using the Numpy `out`
+        # kwarg.
+        if inplace and self.dim == other.dim:
+            np.dot(first, second, out=ret._data)
+        else:
+            ret._data = np.dot(first, second)
+
+        # Update the final dimensions and return
+        ret._set_dims(input_dims, output_dims)
+        return ret
+
+    def _compose_qargs(self, other, qargs, front=False, inplace=False):
+        """Composition with qargs helper function."""
+        # Validate dimensions are compatible and return the composed
+        # operator dimensions
+        input_dims, output_dims = self._get_compose_dims(
+            other, qargs, front)
+
+        # We reshape the data array into a tensor where we expand out
+        # each subsystem index for either the inputs or outputs
+        # depending on order of composition.
+        # Note that we must reverse the subsystem dimension order as
+        # qubit 0 corresponds to the right-most position in the tensor
+        # product, which is the last tensor wire index.
+        if front:
+            # We are composing on subsystem input dims
+            num_indices = len(self._input_dims)
+            shape = (self._output_dim,) + tuple(reversed(self._input_dims))
+            shift = 1
+            right_mul = True
+        else:
+            # We are composing on subsystem output dims
+            num_indices = len(self._output_dims)
+            shape = tuple(reversed(self._output_dims)) + (self._input_dim, )
+            shift = 0
+            right_mul = False
+
+        tensor = np.reshape(self._data, shape)
+        mat = np.reshape(other._data, tuple(
+            reversed(other._output_dims)) + tuple(reversed(other._input_dims)))
+        indices = [num_indices - 1 - qubit for qubit in qargs]
+        initial_shape = (self._output_dim, self._input_dim)
+        final_shape = (np.product(output_dims), np.product(input_dims))
+
+        ret = self if inplace else copy.copy(self)
+
+        if inplace and final_shape == initial_shape:
+            # Since the output dimension is unchanged we can update
+            # the data array inplace using einsum
+            Operator._einsum_matmul(
+                tensor, mat, indices, shift, right_mul, inplace=True)
+        else:
+            ret._data = np.reshape(
+                Operator._einsum_matmul(
+                    tensor, mat, indices, shift, right_mul), final_shape)
+
+        # Update dimensions
+        ret._set_dims(input_dims, output_dims)
+        return ret
+
     @property
     def _shape(self):
         """Return the tensor shape of the matrix operator"""
         return tuple(reversed(self.output_dims())) + tuple(
             reversed(self.input_dims()))
 
-    @classmethod
-    def _einsum_matmul(cls, tensor, mat, indices, shift=0, right_mul=False):
+    @staticmethod
+    def _einsum_matmul(tensor, mat, indices, shift=0, right_mul=False,
+                       inplace=False):
         """Perform a contraction using Numpy.einsum
 
         Args:
@@ -438,6 +548,7 @@ class Operator(BaseOperator):
             shift (int): shift for indices of tensor to contract [Default: 0].
             right_mul (bool): if True right multiply tensor by mat
                               (else left multiply) [Default: False].
+            inplace (bool): update inplace (Default: False).
 
         Returns:
             Numpy.ndarray: the matrix multiplied rank-N tensor.
@@ -461,21 +572,24 @@ class Operator(BaseOperator):
             indices_mat = mat_contract + mat_free
         else:
             indices_mat = mat_free + mat_contract
+        if inplace:
+            return np.einsum(tensor, indices_tensor, mat, indices_mat,
+                             out=tensor)
         return np.einsum(tensor, indices_tensor, mat, indices_mat)
 
-    @classmethod
-    def _init_instruction(cls, instruction):
+    @staticmethod
+    def from_instruction(instruction):
         """Convert a QuantumCircuit or Instruction to an Operator."""
         # Convert circuit to an instruction
         if isinstance(instruction, QuantumCircuit):
             instruction = instruction.to_instruction()
         # Initialize an identity operator of the correct size of the circuit
         op = Operator(np.eye(2 ** instruction.num_qubits))
-        op._append_instruction(instruction)
+        Operator._append_instruction(op, instruction)
         return op
 
-    @classmethod
-    def _instruction_to_matrix(cls, obj):
+    @staticmethod
+    def _instruction_to_matrix(obj):
         """Return Operator for instruction if defined or None otherwise."""
         if not isinstance(obj, Instruction):
             raise QiskitError('Input is not an instruction.')
@@ -489,14 +603,14 @@ class Operator(BaseOperator):
                 pass
         return mat
 
-    def _append_instruction(self, obj, qargs=None):
+    @staticmethod
+    def _append_instruction(operator, obj, qargs=None):
         """Update the current Operator by apply an instruction."""
-        mat = self._instruction_to_matrix(obj)
+        mat = Operator._instruction_to_matrix(obj)
         if mat is not None:
             # Perform the composition and inplace update the current state
             # of the operator
-            op = self.compose(mat, qargs=qargs)
-            self._data = op.data
+            operator._compose(mat, qargs=qargs, inplace=True)
         else:
             # If the instruction doesn't have a matrix defined we use its
             # circuit decomposition definition if it exists, otherwise we
@@ -513,4 +627,4 @@ class Operator(BaseOperator):
                     new_qargs = [tup.index for tup in qregs]
                 else:
                     new_qargs = [qargs[tup.index] for tup in qregs]
-                self._append_instruction(instr, qargs=new_qargs)
+                Operator._append_instruction(operator, instr, qargs=new_qargs)
