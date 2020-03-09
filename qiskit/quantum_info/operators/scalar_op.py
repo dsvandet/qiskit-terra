@@ -185,6 +185,31 @@ class ScalarOp(BaseOperator):
         return other.__class__(self).compose(
             other, qargs=qargs, front=front)
 
+    def append(self, other, qargs=None, front=False):
+        """Compose the current operator inplace.
+
+        Note that ScalarOps can only be appended with another ScalarOp.
+
+        Args:
+            other (ScalarOp): another ScalarOp.
+            qargs (list or None): a list of subsystem positions to apply
+                                  other on. If None apply on all
+                                  subsystems [default: None].
+            front (bool): If True compose using right operator multiplication,
+                          instead of left multiplication [default: False].
+
+         Returns:
+            ScalarOp: The current operator updated to store self @ other.
+
+        Raise:
+            QiskitError: if other is not a ScalarOp.
+        """
+        # pylint: disable=unused-argument
+        if not isinstance(other, ScalarOp):
+            raise QiskitError('A ScalarOp can only be appended with another ScalarOp.')
+        self._coeff *= other.coeff
+        return self
+
     def power(self, n):
         """Return the power of the ScalarOp.
 
