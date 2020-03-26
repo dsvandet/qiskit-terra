@@ -51,17 +51,17 @@ class Clifford(BaseOperator):
             self._table = StabilizerTable(data)
 
         # Validate shape of StabilizerTable
-        if self._table.size != 2 * self._table.n_qubits:
+        if self._table.size != 2 * self._table.num_qubits:
             raise QiskitError(
                 'Invalid Clifford (number of rows {0} != {1}). An {2}-qubit'
                 ' Clifford table requires {1} rows.'.format(
-                    self._table.size, 2 * self._table.n_qubits, self.n_qubits))
+                    self._table.size, 2 * self._table.num_qubits, self.num_qubits))
 
         # TODO: Should we check the input array is a valid Clifford table?
         # This should be done by the `is_unitary` method.
 
         # Initialize BaseOperator
-        dims = self._table.n_qubits * (2,)
+        dims = self._table.num_qubits * (2,)
         super().__init__(dims, dims)
 
     def __repr__(self):
@@ -88,11 +88,6 @@ class Clifford(BaseOperator):
         self._table.__setitem__(key, value)
 
     @property
-    def n_qubits(self):
-        """The number of qubits for the Clifford."""
-        return self._table._n_qubits
-
-    @property
     def table(self):
         """Return StabilizerTable"""
         return self._table
@@ -111,23 +106,23 @@ class Clifford(BaseOperator):
     @property
     def stabilizer(self):
         """Return the stabilizer block of the StabilizerTable."""
-        return StabilizerTable(self._table[self.n_qubits:2*self.n_qubits])
+        return StabilizerTable(self._table[self.num_qubits:2*self.num_qubits])
 
     @stabilizer.setter
     def stabilizer(self, value):
         """Set the value of stabilizer block of the StabilizerTable"""
-        inds = slice(self.n_qubits, 2*self.n_qubits)
+        inds = slice(self.num_qubits, 2*self.num_qubits)
         self._table.__setitem__(inds, value)
 
     @property
     def destabilizer(self):
         """Return the destabilizer block of the StabilizerTable."""
-        return StabilizerTable(self._table[0:self.n_qubits])
+        return StabilizerTable(self._table[0:self.num_qubits])
 
     @destabilizer.setter
     def destabilizer(self, value):
         """Set the value of destabilizer block of the StabilizerTable"""
-        inds = slice(0, self.n_qubits)
+        inds = slice(0, self.num_qubits)
         self._table.__setitem__(inds, value)
 
     # ---------------------------------------------------------------------
@@ -144,8 +139,8 @@ class Clifford(BaseOperator):
         # table.T * [[0, 1], [1, 0]] * table = [[0, 1], [1, 0]]
         # where we are block matrix multiplying using symplectic product
 
-        one = np.eye(self.n_qubits, dtype=int)
-        zero = np.zeros((self.n_qubits, self.n_qubits), dtype=int)
+        one = np.eye(self.num_qubits, dtype=int)
+        zero = np.zeros((self.num_qubits, self.num_qubits), dtype=int)
         seye = np.block([[zero, one], [one, zero]])
         arr = self.table.array.astype(int)
 
@@ -215,7 +210,7 @@ class Clifford(BaseOperator):
         self._get_compose_dims(other, qargs, front)
 
         if qargs is None or (
-                len(qargs) == self.n_qubits and sorted(qargs) == qargs):
+                len(qargs) == self.num_qubits and sorted(qargs) == qargs):
             return self._compose_clifford(other, front=front)
 
         return self._compose_subsystem(other, qargs, front=front)
@@ -346,8 +341,8 @@ class Clifford(BaseOperator):
         else:
             first = self
             second = other
-        n_first = first.n_qubits
-        n_second = second.n_qubits
+        n_first = first.num_qubits
+        n_second = second.num_qubits
 
         # Pad stabilizers and destabilizers
         destab = (first.destabilizer.tensor(n_second * 'I') +
@@ -365,10 +360,10 @@ class Clifford(BaseOperator):
     def _compose_subsystem(self, other, qargs, front=False):
         """Return the composition channel."""
         # Create Clifford on full system from subsystem and compose
-        nq = self.n_qubits
-        no = other.n_qubits
+        nq = self.num_qubits
+        no = other.num_qubits
         fullother = self.copy()
-        fullother.table.array = np.eye(2 * self.n_qubits, dtype=np.bool)
+        fullother.table.array = np.eye(2 * self.num_qubits, dtype=np.bool)
         for inda, qinda in enumerate(qargs):
             for indb, qindb in enumerate(qargs):
                 fullother.table._array[nq - 1 - qinda, nq - 1 - qindb] = other.table._array[
@@ -409,7 +404,7 @@ class Clifford(BaseOperator):
         # ALT METHOD:
         # This one is correct but needs to be optimized
 
-        num_qubits = self.n_qubits
+        num_qubits = self.num_qubits
 
         array1 = table1.array.astype(int)
         phase1 = table1.phase.astype(int)
