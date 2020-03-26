@@ -93,6 +93,7 @@ def random_clifford_circuit(num_qubits, num_gates, gates='all', seed=None):
     return circ
 
 
+@ddt
 class TestCliffordGates(QiskitTestCase):
     """Tests for clifford append gate functions."""
 
@@ -235,80 +236,46 @@ class TestCliffordGates(QiskitTestCase):
                 cliff1 = append_gate(cliff1, split_rel[6], [0])
                 self.assertEqual(cliff, cliff1)
 
-    def test_append_2_qubit_gate(self):
-        "Tests for append of 2-qubit gates"
+    @combine(gate_name=("cx", "cz", "swap"), qubits=([0, 1], [1, 0]))
+    def test_append_2_qubit_gate(self, gate_name, qubits):
+        "Tests for append of 2-qubit gate {gate_name} {qubits}."
 
-        target_table = {
-            "cx [0, 1]": np.array([[True, True, False, False],
+        targets_cliffords = {
+            "cx [0, 1]": Clifford([[True, True, False, False],
                                    [False, True, False, False],
                                    [False, False, True, False],
                                    [False, False, True, True]]),
 
-            "cx [1, 0]": np.array([[True, False, False, False],
+            "cx [1, 0]": Clifford([[True, False, False, False],
                                    [True, True, False, False],
                                    [False, False, True, True],
                                    [False, False, False, True]]),
 
-            "cz [0, 1]": np.array([[True, False, False, True],
+            "cz [0, 1]": Clifford([[True, False, False, True],
                                    [False, True, True, False],
                                    [False, False, True, False],
                                    [False, False, False, True]]),
 
-            "cz [1, 0]": np.array([[True, False, False, True],
+            "cz [1, 0]": Clifford([[True, False, False, True],
                                    [False, True, True, False],
                                    [False, False, True, False],
                                    [False, False, False, True]]),
 
-            "swap [0, 1]": np.array([[False, True, False, False],
+            "swap [0, 1]": Clifford([[False, True, False, False],
                                     [True, False, False, False],
                                     [False, False, False, True],
                                     [False, False, True, False]]),
 
-            "swap [1, 0]": np.array([[False, True, False, False],
+            "swap [1, 0]": Clifford([[False, True, False, False],
                                      [True, False, False, False],
                                      [False, False, False, True],
                                      [False, False, True, False]])
         }
 
-        target_phase = np.array([False, False, False, False])
-
-        target_stabilizer = {
-            "cx [0, 1]": ['+ZI', '+ZZ'],
-            "cx [1, 0]": ['+ZZ', '+IZ'],
-            "cz [0, 1]": ['+ZI', '+IZ'],
-            "cz [1, 0]": ['+ZI', '+IZ'],
-            "swap [0, 1]": ['+IZ', '+ZI'],
-            "swap [1, 0]": ['+IZ', '+ZI']
-        }
-
-        target_destabilizer = {
-            "cx [0, 1]": ['+XX', '+IX'],
-            "cx [1, 0]": ['+XI', '+XX'],
-            "cz [0, 1]": ['+XZ', '+ZX'],
-            "cz [1, 0]": ['+XZ', '+ZX'],
-            "swap [0, 1]": ['+IX', '+XI'],
-            "swap [1, 0]": ['+IX', '+XI']
-        }
-
-        for gate_name in ("cx", "cz", "swap"):
-            for qubits in ([0, 1], [1, 0]):
-                with self.subTest(msg='append gate %s %s' % (
-                        gate_name, qubits)):
-                    gate_qubits = gate_name + " " + str(qubits)
-                    cliff = Clifford(np.eye(4))
-                    cliff = append_gate(cliff, gate_name, qubits)
-                    value_table = cliff.table._array
-                    value_phase = cliff.table._phase
-                    value_stabilizer = cliff.stabilizer.to_labels()
-                    value_destabilizer = cliff.destabilizer.to_labels()
-                    self.assertTrue(np.all(np.array(value_table ==
-                                                    target_table[gate_qubits])))
-                    self.assertTrue(np.all(np.array(value_phase ==
-                                                    target_phase)))
-                    self.assertTrue(np.all(np.array(value_stabilizer ==
-                                                    target_stabilizer[gate_qubits])))
-                    self.assertTrue(np.all(np.array(value_destabilizer ==
-                                                    target_destabilizer[gate_qubits])))
+        gate_qubits = gate_name + " " + str(qubits)
+        cliff = append_gate(Clifford(np.eye(4)), gate_name, qubits)
+        target = targets_cliffords[gate_qubits]
+        self.assertEqual(target, cliff)
 
     def test_2_qubit_identity_relations(self):
         "Tests identity relations for 2-qubit gates"
