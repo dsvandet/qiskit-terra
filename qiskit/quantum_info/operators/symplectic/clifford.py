@@ -336,19 +336,17 @@ class Clifford(BaseOperator):
             other = Clifford(other)
 
         if reverse:
-            first = other
-            second = self
+            cliff0 = self
+            cliff1 = other
         else:
-            first = self
-            second = other
-        n_first = first.num_qubits
-        n_second = second.num_qubits
+            cliff0 = other
+            cliff1 = self
 
         # Pad stabilizers and destabilizers
-        destab = (first.destabilizer.tensor(n_second * 'I') +
-                  second.destabilizer.expand(n_first * 'I'))
-        stab = (first.stabilizer.tensor(n_second * 'I') +
-                second.stabilizer.expand(n_first * 'I'))
+        destab = (cliff0.destabilizer.expand(cliff1.num_qubits * 'I') +
+                  cliff1.destabilizer.tensor(cliff0.num_qubits * 'I'))
+        stab = (cliff0.stabilizer.expand(cliff1.num_qubits * 'I') +
+                cliff1.stabilizer.tensor(cliff0.num_qubits * 'I'))
 
         # Add the padded table
         table = destab + stab

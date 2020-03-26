@@ -526,8 +526,8 @@ class TestCliffordOperators(QiskitTestCase):
             cliff2 = Clifford(circ2)
             value = cliff1.tensor(cliff2)
             circ = QuantumCircuit(num_qubits_1 + num_qubits_2)
-            circ.append(circ1, range(num_qubits_1))
-            circ.append(circ2, range(num_qubits_1, num_qubits_1 + num_qubits_2))
+            circ.append(circ2, range(num_qubits_2))
+            circ.append(circ1, range(num_qubits_2, num_qubits_1 + num_qubits_2))
             target = Clifford(circ)
             self.assertEqual(target, value)
 
@@ -547,8 +547,8 @@ class TestCliffordOperators(QiskitTestCase):
             cliff2 = Clifford(circ2)
             value = cliff1.expand(cliff2)
             circ = QuantumCircuit(num_qubits_1 + num_qubits_2)
-            circ.append(circ2, range(num_qubits_2))
-            circ.append(circ1, range(num_qubits_2, num_qubits_1 + num_qubits_2))
+            circ.append(circ1, range(num_qubits_1))
+            circ.append(circ2, range(num_qubits_1, num_qubits_1 + num_qubits_2))
             target = Clifford(circ)
             self.assertEqual(target, value)
 
