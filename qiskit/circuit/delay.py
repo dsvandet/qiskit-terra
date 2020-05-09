@@ -15,10 +15,10 @@
 """
 Delay instruction.
 """
+from numpy import eye
 from qiskit.circuit.quantumcircuit import QuantumCircuit, QuantumRegister
 from qiskit.circuit.instruction import Instruction
 from qiskit.circuit.exceptions import CircuitError
-
 
 class Delay(Instruction):
     """Do nothing and just delay/wait/idle for a specified duration."""
@@ -45,6 +45,10 @@ class Delay(Instruction):
     def duration(self, duration):
         self.params = [duration]
         self._duration = duration
+
+    def to_matrix(self):
+        """Matrix definition"""
+        return eye(2 ** self.num_qubits, dtype=complex)
 
 
 def delay(self, duration, *qargs, unit=None):
