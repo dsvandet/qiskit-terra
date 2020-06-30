@@ -20,7 +20,8 @@ import copy
 import warnings
 from abc import ABC, abstractmethod
 
-import numpy as np
+import numpy as onp
+import qiskit.numpy as np
 
 from qiskit.exceptions import QiskitError
 from qiskit.quantum_info.operators.base_operator import BaseOperator
@@ -98,7 +99,7 @@ class QuantumState(ABC):
     @property
     def _rng(self):
         if self._rng_generator is None:
-            return np.random
+            return onp.random
         return self._rng_generator
 
     def _reshape(self, dims=None):
@@ -135,10 +136,10 @@ class QuantumState(ABC):
         """Set the seed for the quantum state RNG."""
         if value is None:
             self._rng_generator = None
-        elif isinstance(value, np.random.Generator):
+        elif isinstance(value, onp.random.Generator):
             self._rng_generator = value
         else:
-            self._rng_generator = np.random.default_rng(value)
+            self._rng_generator = onp.random.default_rng(value)
 
     @abstractmethod
     def is_valid(self, atol=None, rtol=None):
@@ -380,11 +381,11 @@ class QuantumState(ABC):
             set to a fixed value by using the stats :meth:`seed` method.
         """
         # Get measurement probabilities for measured qubits
-        probs = self.probabilities(qargs)
+        probs = np.asarray(self.probabilities(qargs), backend='numpy')
 
         # Generate list of possible outcome string labels
         labels = self._index_to_ket_array(
-            np.arange(len(probs)), self.dims(qargs), string_labels=True)
+            onp.arange(len(probs)), self.dims(qargs), string_labels=True)
         return self._rng.choice(labels, p=probs, size=shots)
 
     def sample_counts(self, shots, qargs=None):
@@ -436,7 +437,7 @@ class QuantumState(ABC):
         """
         # Sample a single measurement outcome from probabilities
         dims = self.dims(qargs)
-        probs = self.probabilities(qargs)
+        probs = np.asarray(self.probabilities(qargs), backend='numpy')
         sample = self._rng.choice(len(probs), p=probs, size=1)
 
         # Format outcome
@@ -444,7 +445,7 @@ class QuantumState(ABC):
             sample, self.dims(qargs), string_labels=True)[0]
 
         # Convert to projector for state update
-        proj = np.zeros(len(probs), dtype=complex)
+        proj = onp.zeros(len(probs), dtype=complex)
         proj[sample] = 1 / np.sqrt(probs[sample])
 
         # Update state object
@@ -498,12 +499,12 @@ class QuantumState(ABC):
 
         if string_labels:
             max_dim = max(dims)
-            char_kets = np.asarray(kets, dtype=np.unicode_)
+            char_kets = np.asarray(kets, dtype=onp.unicode_, backend='numpy')
             str_kets = char_kets[0]
             for row in char_kets[1:]:
                 if max_dim > 10:
-                    str_kets = np.char.add(',', str_kets)
-                str_kets = np.char.add(row, str_kets)
+                    str_kets = onp.char.add(',', str_kets)
+                str_kets = onp.char.add(row, str_kets)
             return str_kets.T
 
         return kets.T
@@ -603,14 +604,14 @@ class QuantumState(ABC):
         for i, dim in enumerate(dims):
             if i in qargs:
                 if accum:
-                    new_dims.append(np.product(accum))
+                    new_dims.append(onp.product(accum))
                     accum = []
                 new_dims.append(dim)
                 qargs_map[i] = len(new_dims) - 1
             else:
                 accum.append(dim)
         if accum:
-            new_dims.append(np.product(accum))
+            new_dims.append(onp.product(accum))
         return tuple(new_dims), [qargs_map[i] for i in qargs]
 
     @staticmethod
@@ -649,9 +650,9 @@ class QuantumState(ABC):
         # Transpose output probs based on order of qargs
         if sorted(accum_qargs) != accum_qargs:
             axes = np.argsort(accum_qargs)
-            return np.ravel(np.transpose(new_probs, axes=axes))
+            return np.flatten(np.transpose(new_probs, axes=axes))
 
-        return np.ravel(new_probs)
+        return np.flatten(new_probs)
 
     # Overloads
     def __matmul__(self, other):

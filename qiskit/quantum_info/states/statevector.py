@@ -21,7 +21,8 @@ import re
 import warnings
 from numbers import Number
 
-import numpy as np
+import numpy as onp
+import qiskit.numpy as np
 
 from qiskit.circuit.quantumcircuit import QuantumCircuit
 from qiskit.circuit.instruction import Instruction
@@ -34,13 +35,14 @@ from qiskit.quantum_info.operators.predicates import matrix_equal
 class Statevector(QuantumState):
     """Statevector class"""
 
-    def __init__(self, data, dims=None):
+    def __init__(self, data, dims=None, backend=None):
         """Initialize a statevector object.
 
         Args:
             data (vector_like): a complex statevector.
             dims (int or tuple or list): Optional. The subsystem dimension of
                                          the state (See additional information).
+            backend (str): array backend for statevector.
 
         Raises:
             QiskitError: if input data is not valid.
@@ -58,26 +60,34 @@ class Statevector(QuantumState):
               If it is not a power of two the state will have a single
               d-dimensional subsystem.
         """
-        if isinstance(data, (list, np.ndarray)):
-            # Finally we check if the input is a raw vector in either a
-            # python list or numpy array format.
-            self._data = np.asarray(data, dtype=complex)
+        if np.is_array(data):
+            self._data = np.asarray(
+                data, dtype=onp.complex128, backend=backend)
+
         elif isinstance(data, Statevector):
-            self._data = data._data
             if dims is None:
                 dims = data._dims
+            if backend is None or data._backend == backend:
+                self._data = data._data
+            else:
+                self._data = np.asarray(data._data, backend=backend)
+
         elif isinstance(data, Operator):
             # We allow conversion of column-vector operators to Statevectors
             input_dim, _ = data.dim
             if input_dim != 1:
                 raise QiskitError("Input Operator is not a column-vector.")
-            self._data = np.ravel(data.data)
+            self._data = np.asarray(np.ravel(data._data), backend=backend)
         else:
             raise QiskitError("Invalid input data format for Statevector")
+
+        # Set backend string
+        self._backend = np.array_backend(self._data)
+
         # Check that the input is a numpy vector or column-vector numpy
         # matrix. If it is a column-vector matrix reshape to a vector.
-        ndim = self._data.ndim
-        shape = self._data.shape
+        shape = np.shape(self._data)
+        ndim = len(shape)
         if ndim != 1:
             if ndim == 2 and shape[1] == 1:
                 self._data = np.reshape(self._data, shape[0])
@@ -92,10 +102,10 @@ class Statevector(QuantumState):
     def __repr__(self):
         prefix = 'Statevector('
         pad = len(prefix) * ' '
-        return '{}{},\n{}dims={})'.format(
+        return '{}{},\n{}dims={}, backend={})'.format(
             prefix, np.array2string(
-                self.data, separator=', ', prefix=prefix),
-            pad, self._dims)
+                np.asarray(self.data, backend='numpy'), separator=', ', prefix=prefix),
+            pad, self._dims, self._backend)
 
     @property
     def data(self):
@@ -108,7 +118,7 @@ class Statevector(QuantumState):
             atol = self.atol
         if rtol is None:
             rtol = self.rtol
-        norm = np.linalg.norm(self.data)
+        norm = np.norm(self.data)
         return np.allclose(norm, 1, rtol=rtol, atol=atol)
 
     def to_operator(self):
@@ -118,7 +128,7 @@ class Statevector(QuantumState):
 
     def conjugate(self):
         """Return the conjugate of the operator."""
-        return Statevector(np.conj(self.data), dims=self.dims())
+        return Statevector(np.conj(self.data), dims=self.dims(), backend=self._backend)
 
     def trace(self):
         """Return the trace of the quantum state as a density matrix."""
@@ -145,10 +155,10 @@ class Statevector(QuantumState):
             QiskitError: if other is not a quantum state.
         """
         if not isinstance(other, Statevector):
-            other = Statevector(other)
+            other = Statevector(other, backend=self._backend)
         dims = other.dims() + self.dims()
         data = np.kron(self._data, other._data)
-        return Statevector(data, dims)
+        return Statevector(data, dims, backend=self._backend)
 
     def expand(self, other):
         """Return the tensor product state other ⊗ self.
@@ -163,10 +173,10 @@ class Statevector(QuantumState):
             QiskitError: if other is not a quantum state.
         """
         if not isinstance(other, Statevector):
-            other = Statevector(other)
+            other = Statevector(other, backend=self._backend)
         dims = self.dims() + other.dims()
         data = np.kron(other._data, self._data)
-        return Statevector(data, dims)
+        return Statevector(data, dims, backend=self._backend)
 
     def _add(self, other):
         """Return the linear combination self + other.
@@ -182,10 +192,10 @@ class Statevector(QuantumState):
                          incompatible dimensions.
         """
         if not isinstance(other, Statevector):
-            other = Statevector(other)
+            other = Statevector(other, backend=self._backend)
         if self.dim != other.dim:
             raise QiskitError("other Statevector has different dimensions.")
-        return Statevector(self.data + other.data, self.dims())
+        return Statevector(self.data + other.data, self.dims(), backend=self._backend)
 
     def _multiply(self, other):
         """Return the scalar multiplied state self * other.
@@ -201,7 +211,7 @@ class Statevector(QuantumState):
         """
         if not isinstance(other, Number):
             raise QiskitError("other is not a number")
-        return Statevector(other * self.data, self.dims())
+        return Statevector(other * self.data, self.dims(), backend=self._backend)
 
     def evolve(self, other, qargs=None):
         """Evolve a quantum state by the operator.
@@ -256,7 +266,7 @@ class Statevector(QuantumState):
         """
         if not isinstance(other, Statevector):
             try:
-                other = Statevector(other)
+                other = Statevector(other, backend=self._backend)
             except QiskitError:
                 return False
         if self.dim != other.dim:
@@ -341,7 +351,7 @@ class Statevector(QuantumState):
         probs = self._subsystem_probabilities(
             np.abs(self.data) ** 2, self._dims, qargs=qargs)
         if decimals is not None:
-            probs = probs.round(decimals=decimals)
+            probs = np.round(probs, decimals=decimals)
         return probs
 
     def reset(self, qargs=None):
@@ -365,21 +375,21 @@ class Statevector(QuantumState):
         """
         if qargs is None:
             # Resetting all qubits does not require sampling or RNG
-            state = np.zeros(self._dim, dtype=complex)
+            state = onp.zeros(self._dim, dtype=complex)
             state[0] = 1
-            return Statevector(state, dims=self._dims)
+            return Statevector(state, dims=self._dims, backend=self._backend)
 
         # Sample a single measurement outcome
         dims = self.dims(qargs)
-        probs = self.probabilities(qargs)
+        probs = np.asarray(self.probabilities(qargs), backend='numpy')
         sample = self._rng.choice(len(probs), p=probs, size=1)
 
         # Convert to projector for state update
-        proj = np.zeros(len(probs), dtype=complex)
+        proj = onp.zeros(len(probs), dtype=complex)
         proj[sample] = 1 / np.sqrt(probs[sample])
 
         # Rotate outcome to 0
-        reset = np.eye(len(probs))
+        reset = onp.eye(len(probs))
         reset[0, 0] = 0
         reset[sample, sample] = 0
         reset[0, sample] = 1
@@ -407,7 +417,7 @@ class Statevector(QuantumState):
         return self.probabilities_dict()
 
     @classmethod
-    def from_label(cls, label):
+    def from_label(cls, label, backend='numpy'):
         """Return a tensor product of Pauli X,Y,Z eigenstates.
 
         .. list-table:: Single-qubit state labels
@@ -431,6 +441,7 @@ class Statevector(QuantumState):
         Args:
             label (string): a eigenstate string ket label (see table for
                             allowed values).
+            backend (str): array backend for statevector.
 
         Returns:
             Statevector: The N-qubit basis state density matrix.
@@ -459,10 +470,10 @@ class Statevector(QuantumState):
             z_label = z_label.replace('l', '1')
         # Initialize Z eigenstate vector
         num_qubits = len(label)
-        data = np.zeros(1 << num_qubits, dtype=complex)
+        data = onp.zeros(1 << num_qubits, dtype=complex)
         pos = int(z_label, 2)
         data[pos] = 1
-        state = Statevector(data)
+        state = Statevector(data, backend=backend)
         if xy_states:
             # Apply hadamards to all qubits in X eigenstates
             x_mat = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
@@ -476,13 +487,14 @@ class Statevector(QuantumState):
         return state
 
     @staticmethod
-    def from_int(i, dims):
+    def from_int(i, dims, backend='numpy'):
         """Return a computational basis statevector.
 
         Args:
             i (int): the basis state element.
             dims (int or tuple or list): The subsystem dimensions of the statevector
                                          (See additional information).
+            backend (str): array backend.
 
         Returns:
             Statevector: The computational basis state :math:`|i\\rangle`.
@@ -499,12 +511,12 @@ class Statevector(QuantumState):
               will have a single d-dimensional subsystem.
         """
         size = np.product(dims)
-        state = np.zeros(size, dtype=complex)
+        state = onp.zeros(size, dtype=complex)
         state[i] = 1.0
-        return Statevector(state, dims=dims)
+        return Statevector(state, dims=dims, backend=backend)
 
     @classmethod
-    def from_instruction(cls, instruction):
+    def from_instruction(cls, instruction, backend='numpy'):
         """Return the output statevector of an instruction.
 
         The statevector is initialized in the state :math:`|{0,\\ldots,0}\\rangle` of the
@@ -513,6 +525,7 @@ class Statevector(QuantumState):
 
         Args:
             instruction (qiskit.circuit.Instruction or QuantumCircuit): instruction or circuit
+            backend (str): array backend.
 
         Returns:
             Statevector: The final statevector.
@@ -525,8 +538,9 @@ class Statevector(QuantumState):
         if isinstance(instruction, QuantumCircuit):
             instruction = instruction.to_instruction()
         # Initialize an the statevector in the all |0> state
-        init = np.zeros(2 ** instruction.num_qubits, dtype=complex)
+        init = onp.zeros(2 ** instruction.num_qubits, dtype=complex)
         init[0] = 1.0
+        init = np.asarray(init, backend=backend)
         vec = Statevector(init, dims=instruction.num_qubits * (2,))
         return Statevector._evolve_instruction(vec, instruction)
 
@@ -602,9 +616,10 @@ class Statevector(QuantumState):
         """Evolve a qudit statevector"""
         is_qubit = bool(statevec.num_qubits and oper.num_qubits)
 
+        mat = np.asarray(oper._data, backend=statevec._backend)
         if qargs is None:
             # Full system evolution
-            statevec._data = np.dot(oper._data, statevec._data)
+            statevec._data = np.dot(mat, statevec._data)
             if not is_qubit:
                 statevec._set_dims(oper._output_dims)
             return statevec
@@ -642,8 +657,8 @@ class Statevector(QuantumState):
         # reshape input for contraction
         statevec._data = np.reshape(np.transpose(
             np.reshape(statevec.data, pre_tensor_shape), axes), contract_shape)
-        statevec._data = np.reshape(np.dot(oper.data, statevec._data), post_tensor_shape)
-        statevec._data = np.reshape(np.transpose(statevec._data, axes_inv), new_dim)
+        statevec._data = np.reshape(np.dot(mat, statevec._data), post_tensor_shape)
+        statevec._data = np.reshape(np.transpose(statevec._data, axes_inv), [new_dim])
 
         # Update dimension
         if not is_qubit:
