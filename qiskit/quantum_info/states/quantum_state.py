@@ -20,7 +20,9 @@ import copy
 import warnings
 from abc import ABC, abstractmethod
 
-import numpy as np
+import numpy as onp
+import qiskit.quantum_info.numpy as qnp
+from qiskit.quantum_info.numpy.asarray import asarray_numpy
 
 from qiskit.exceptions import QiskitError
 from qiskit.quantum_info.operators.base_operator import BaseOperator
@@ -97,7 +99,7 @@ class QuantumState(ABC):
     @property
     def _rng(self):
         if self._rng_generator is None:
-            return np.random
+            return onp.random
         return self._rng_generator
 
     def _reshape(self, dims=None):
@@ -113,7 +115,7 @@ class QuantumState(ABC):
             QiskitError: if combined size of all subsystem dimensions are not constant.
         """
         if dims is not None:
-            if np.product(dims) != self._dim:
+            if qnp.product(dims) != self._dim:
                 raise QiskitError(
                     "Reshaped dims are incompatible with combined dimension."
                 )
@@ -134,10 +136,10 @@ class QuantumState(ABC):
         """Set the seed for the quantum state RNG."""
         if value is None:
             self._rng_generator = None
-        elif isinstance(value, np.random.Generator):
+        elif isinstance(value, onp.random.Generator):
             self._rng_generator = value
         else:
-            self._rng_generator = np.random.default_rng(value)
+            self._rng_generator = onp.random.default_rng(value)
 
     @abstractmethod
     def is_valid(self, atol=None, rtol=None):
@@ -370,8 +372,8 @@ class QuantumState(ABC):
 
         # Generate list of possible outcome string labels
         labels = self._index_to_ket_array(
-            np.arange(len(probs)), self.dims(qargs), string_labels=True)
-        return self._rng.choice(labels, p=probs, size=shots)
+            onp.arange(len(probs)), self.dims(qargs), string_labels=True)
+        return self._rng.choice(labels, p=asarray_numpy(probs), size=shots)
 
     def sample_counts(self, shots, qargs=None):
         """Sample a dict of qubit measurement outcomes in the computational basis.
@@ -399,7 +401,7 @@ class QuantumState(ABC):
         samples = self.sample_memory(shots, qargs=qargs)
 
         # Combine all samples into a counts dictionary
-        inds, counts = np.unique(samples, return_counts=True)
+        inds, counts = qnp.unique(samples, return_counts=True)
         return dict(zip(inds, counts))
 
     def measure(self, qargs=None):
@@ -423,21 +425,21 @@ class QuantumState(ABC):
         # Sample a single measurement outcome from probabilities
         dims = self.dims(qargs)
         probs = self.probabilities(qargs)
-        sample = self._rng.choice(len(probs), p=probs, size=1)
+        sample = self._rng.choice(len(probs), p=asarray_numpy(probs), size=1)
 
         # Format outcome
         outcome = self._index_to_ket_array(
             sample, self.dims(qargs), string_labels=True)[0]
 
         # Convert to projector for state update
-        proj = np.zeros(len(probs), dtype=complex)
-        proj[sample] = 1 / np.sqrt(probs[sample])
+        proj = onp.zeros(len(probs), dtype=complex)
+        proj[sample] = 1 / qnp.sqrt(probs[sample])
 
         # Update state object
         # TODO: implement a more efficient state update method for
         # diagonal matrix multiplication
         ret = self.evolve(
-            Operator(np.diag(proj), input_dims=dims, output_dims=dims),
+            Operator(qnp.diag(proj), input_dims=dims, output_dims=dims),
             qargs=qargs)
 
         return outcome, ret
@@ -454,7 +456,7 @@ class QuantumState(ABC):
         self._dims = tuple(dims)
         # The total input and output dimensions are given by the product
         # of all subsystem dimensions
-        self._dim = np.product(dims)
+        self._dim = qnp.product(dims)
         # Check if an N-qubit operator
         if set(self._dims) == set([2]):
             # If so set the number of qubits
@@ -468,28 +470,28 @@ class QuantumState(ABC):
         """Convert an index array into a ket array.
 
         Args:
-            inds (np.array): an integer index array.
+            inds (qnp.array): an integer index array.
             dims (tuple): a list of subsystem dimensions.
             string_labels (bool): return ket as string if True, otherwise
                                   return as index array (Default: False).
 
         Returns:
-            np.array: an array of ket strings if string_label=True, otherwise
+            qnp.array: an array of ket strings if string_label=True, otherwise
                       an array of ket lists.
         """
         shifts = [1]
         for dim in dims[:-1]:
             shifts.append(shifts[-1] * dim)
-        kets = np.array([(inds // shift) % dim for dim, shift in zip(dims, shifts)])
+        kets = qnp.array([(inds // shift) % dim for dim, shift in zip(dims, shifts)])
 
         if string_labels:
             max_dim = max(dims)
-            char_kets = np.asarray(kets, dtype=np.unicode_)
+            char_kets = asarray_numpy(kets, dtype=onp.unicode_)
             str_kets = char_kets[0]
             for row in char_kets[1:]:
                 if max_dim > 10:
-                    str_kets = np.char.add(',', str_kets)
-                str_kets = np.char.add(row, str_kets)
+                    str_kets = onp.char.add(',', str_kets)
+                str_kets = onp.char.add(row, str_kets)
             return str_kets.T
 
         return kets.T
@@ -589,14 +591,14 @@ class QuantumState(ABC):
         for i, dim in enumerate(dims):
             if i in qargs:
                 if accum:
-                    new_dims.append(np.product(accum))
+                    new_dims.append(onp.product(accum))
                     accum = []
                 new_dims.append(dim)
                 qargs_map[i] = len(new_dims) - 1
             else:
                 accum.append(dim)
         if accum:
-            new_dims.append(np.product(accum))
+            new_dims.append(onp.product(accum))
         return tuple(new_dims), [qargs_map[i] for i in qargs]
 
     @staticmethod
@@ -629,15 +631,15 @@ class QuantumState(ABC):
             axis.remove(n_qargs - 1 - i)
 
         # Reshape the probability to a tensor and sum over maginalized axes
-        new_probs = np.sum(np.reshape(probs, list(reversed(accum_dims))),
-                           axis=tuple(axis))
+        new_probs = qnp.sum(qnp.reshape(probs, list(reversed(accum_dims))),
+                            axis=tuple(axis))
 
         # Transpose output probs based on order of qargs
         if sorted(accum_qargs) != accum_qargs:
-            axes = np.argsort(accum_qargs)
-            return np.ravel(np.transpose(new_probs, axes=axes))
+            axes = qnp.argsort(accum_qargs)
+            return qnp.flatten(qnp.transpose(new_probs, axes=axes))
 
-        return np.ravel(new_probs)
+        return qnp.flatten(new_probs)
 
     # Overloads
     def __matmul__(self, other):
