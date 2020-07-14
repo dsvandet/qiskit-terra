@@ -36,7 +36,7 @@ import warnings
 import copy
 from itertools import zip_longest
 
-import numpy
+import qiskit.numpy as numpy
 
 from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.quantumregister import QuantumRegister
@@ -44,6 +44,7 @@ from qiskit.circuit.classicalregister import ClassicalRegister
 from qiskit.qobj.qasm_qobj import QasmQobjInstruction
 from qiskit.circuit.parameter import ParameterExpression
 from .tools import pi_check
+
 
 _CUTOFF_PRECISION = 1E-10
 
@@ -155,6 +156,9 @@ class Instruction:
                 self._params.append(single_param)
             # example: Aer expectation_value_snapshot [complex, 'X']
             elif isinstance(single_param, list):
+                self._params.append(single_param)
+            # example: jax.numpy.array([[1, 0], [0, 1]])
+            elif numpy._HAS_JAX and isinstance(single_param, (numpy.JaxArray, numpy.JaxParam)):
                 self._params.append(single_param)
             # example: numpy.array([[1, 0], [0, 1]])
             elif isinstance(single_param, numpy.ndarray):
