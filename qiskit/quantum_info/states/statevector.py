@@ -671,7 +671,7 @@ class Statevector(QuantumState):
         from qiskit.circuit.reset import Reset
         from qiskit.circuit.barrier import Barrier
 
-        mat = Operator._instruction_to_matrix(obj)
+        mat = Operator._instruction_to_matrix(obj, backend=statevec._backend)
         if mat is not None:
             # Perform the composition and inplace update the current state
             # of the operator
