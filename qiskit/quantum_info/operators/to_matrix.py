@@ -51,25 +51,21 @@ def _(obj, backend='numpy'):
 
 @to_matrix.register(RXGate)
 def _(obj, backend='numpy'):
-    print('TO_MATRIX RX')
     theta2 = obj.params[0] / 2
     mat = np.cos(theta2) * np.asarray(
         [[1., 0.], [0., 1.]], backend=backend) + -1j * np.sin(theta2) * np.asarray(
             [[0., 1.], [1., 0.]], backend=backend
         )
-    print('TO_MATRIX RX OK')
     return mat
 
 
 @to_matrix.register(RYGate)
 def _(obj, backend='numpy'):
-    print('TO_MATRIX RY')
     theta2 = obj.params[0] / 2
     mat = np.cos(theta2) * np.asarray(
         [[1., 0.], [0., 1.]], backend=backend) + np.sin(theta2) * np.asarray(
             [[0., -1.], [1., 0.]], backend=backend
         )
-    print('TO_MATRIX RY OK')
     return mat
 
 
