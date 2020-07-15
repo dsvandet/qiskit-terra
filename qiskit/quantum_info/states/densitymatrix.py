@@ -18,7 +18,8 @@ DensityMatrix quantum state class.
 
 import warnings
 from numbers import Number
-import numpy as np
+import numpy as onp
+import qiskit.numpy as np
 
 from qiskit.circuit.quantumcircuit import QuantumCircuit
 from qiskit.circuit.instruction import Instruction
@@ -36,7 +37,7 @@ from qiskit.quantum_info.states.statevector import Statevector
 class DensityMatrix(QuantumState):
     """DensityMatrix class"""
 
-    def __init__(self, data, dims=None):
+    def __init__(self, data, dims=None, backend=None):
         """Initialize a density matrix object.
 
         Args:
@@ -45,6 +46,7 @@ class DensityMatrix(QuantumState):
                 as the projector of that vector.
             dims (int or tuple or list): Optional. The subsystem dimension
                     of the state (See additional information).
+            backend (str): array backend for density matrix.
 
         Raises:
             QiskitError: if input data is not valid.
@@ -62,25 +64,31 @@ class DensityMatrix(QuantumState):
               If it is not a power of two the state will have a single
               d-dimensional subsystem.
         """
-        if isinstance(data, (list, np.ndarray)):
-            # Finally we check if the input is a raw matrix in either a
-            # python list or numpy array format.
-            self._data = np.asarray(data, dtype=complex)
+        if np.is_array(data):
+            self._data = np.asarray(
+                data, dtype=onp.complex128, backend=backend)
+
         elif hasattr(data, 'to_operator'):
             # If the data object has a 'to_operator' attribute this is given
             # higher preference than the 'to_matrix' method for initializing
             # an Operator object.
             op = data.to_operator()
-            self._data = op.data
+            self._data = np.asarray(op.data, backend=backend)
             if dims is None:
                 dims = op._output_dims
+
         elif hasattr(data, 'to_matrix'):
             # If no 'to_operator' attribute exists we next look for a
             # 'to_matrix' attribute to a matrix that will be cast into
             # a complex numpy matrix.
-            self._data = np.asarray(data.to_matrix(), dtype=complex)
+            self._data = np.asarray(
+                data.to_matrix(), dtype=onp.complex128, backend=backend)
         else:
             raise QiskitError("Invalid input data format for DensityMatrix")
+
+        # Set backend string
+        self._backend = np.array_backend(self._data)
+
         # Convert statevector into a density matrix
         ndim = self._data.ndim
         shape = self._data.shape
@@ -103,10 +111,10 @@ class DensityMatrix(QuantumState):
     def __repr__(self):
         prefix = 'DensityMatrix('
         pad = len(prefix) * ' '
-        return '{}{},\n{}dims={})'.format(
+        return '{}{},\n{}dims={}, backend={})'.format(
             prefix, np.array2string(
-                self._data, separator=', ', prefix=prefix),
-            pad, self._dims)
+                np.asarray(self._data, backend='numpy'), separator=', ', prefix=prefix),
+            pad, self._dims, self._backend)
 
     @property
     def data(self):
@@ -135,7 +143,8 @@ class DensityMatrix(QuantumState):
 
     def conjugate(self):
         """Return the conjugate of the density matrix."""
-        return DensityMatrix(np.conj(self.data), dims=self.dims())
+        return DensityMatrix(
+            np.conj(self.data), dims=self.dims(), backend=self._backend)
 
     def trace(self):
         """Return the trace of the density matrix."""
@@ -162,10 +171,10 @@ class DensityMatrix(QuantumState):
             QiskitError: if other is not a quantum state.
         """
         if not isinstance(other, DensityMatrix):
-            other = DensityMatrix(other)
+            other = DensityMatrix(other, backend=self._backend)
         dims = other.dims() + self.dims()
         data = np.kron(self._data, other._data)
-        return DensityMatrix(data, dims)
+        return DensityMatrix(data, dims, backend=self._backend)
 
     def expand(self, other):
         """Return the tensor product state other ⊗ self.
@@ -180,10 +189,10 @@ class DensityMatrix(QuantumState):
             QiskitError: if other is not a quantum state.
         """
         if not isinstance(other, DensityMatrix):
-            other = DensityMatrix(other)
+            other = DensityMatrix(other, backend=self._backend)
         dims = self.dims() + other.dims()
         data = np.kron(other._data, self._data)
-        return DensityMatrix(data, dims)
+        return DensityMatrix(data, dims, backend=self._backend)
 
     def _add(self, other):
         """Return the linear combination self + other.
@@ -199,10 +208,10 @@ class DensityMatrix(QuantumState):
                          incompatible dimensions.
         """
         if not isinstance(other, DensityMatrix):
-            other = DensityMatrix(other)
+            other = DensityMatrix(other, backend=self._backend)
         if self.dim != other.dim:
             raise QiskitError("other DensityMatrix has different dimensions.")
-        return DensityMatrix(self.data + other.data, self.dims())
+        return DensityMatrix(self.data + other.data, self.dims(), backend=self._backend)
 
     def _multiply(self, other):
         """Return the scalar multiplied state other * self.
@@ -218,7 +227,7 @@ class DensityMatrix(QuantumState):
         """
         if not isinstance(other, Number):
             raise QiskitError("other is not a number")
-        return DensityMatrix(other * self.data, self.dims())
+        return DensityMatrix(other * self.data, self.dims(), backend=self._backend)
 
     def evolve(self, other, qargs=None):
         """Evolve a quantum state by an operator.
@@ -350,9 +359,9 @@ class DensityMatrix(QuantumState):
         """
         if qargs is None:
             # Resetting all qubits does not require sampling or RNG
-            state = np.zeros(2 * (self._dim, ), dtype=complex)
+            state = onp.zeros(2 * (self._dim, ), dtype=onp.complex128)
             state[0, 0] = 1
-            return DensityMatrix(state, dims=self._dims)
+            return DensityMatrix(state, dims=self._dims, backend=self._backend)
 
         # Reset by evolving by reset SuperOp
         dims = self.dims(qargs)
@@ -361,7 +370,7 @@ class DensityMatrix(QuantumState):
         return self.evolve(reset_superop, qargs=qargs)
 
     @classmethod
-    def from_label(cls, label):
+    def from_label(cls, label, backend='numpy'):
         r"""Return a tensor product of Pauli X,Y,Z eigenstates.
 
         .. list-table:: Single-qubit state labels
@@ -385,6 +394,7 @@ class DensityMatrix(QuantumState):
         Args:
             label (string): a eigenstate string ket label (see table for
                             allowed values).
+            backend (str): array backend for density matrix.
 
         Returns:
             Statevector: The N-qubit basis state density matrix.
@@ -393,16 +403,17 @@ class DensityMatrix(QuantumState):
             QiskitError: if the label contains invalid characters, or the length
                          of the label is larger than an explicitly specified num_qubits.
         """
-        return DensityMatrix(Statevector.from_label(label))
+        return DensityMatrix(Statevector.from_label(label), backend=backend)
 
     @staticmethod
-    def from_int(i, dims):
+    def from_int(i, dims, backend='numpy'):
         """Return a computational basis state density matrix.
 
         Args:
             i (int): the basis state element.
             dims (int or tuple or list): The subsystem dimensions of the statevector
                                          (See additional information).
+            backend (str): array backend for density matrix.
 
         Returns:
             DensityMatrix: The computational basis state :math:`|i\\rangle\\!\\langle i|`.
@@ -419,12 +430,12 @@ class DensityMatrix(QuantumState):
               will have a single d-dimensional subsystem.
         """
         size = np.product(dims)
-        state = np.zeros((size, size), dtype=complex)
+        state = onp.zeros((size, size), dtype=complex)
         state[i, i] = 1.0
-        return DensityMatrix(state, dims=dims)
+        return DensityMatrix(state, dims=dims, backend=backend)
 
     @classmethod
-    def from_instruction(cls, instruction):
+    def from_instruction(cls, instruction, backend='numpy'):
         """Return the output density matrix of an instruction.
 
         The statevector is initialized in the state :math:`|{0,\\ldots,0}\\rangle` of
@@ -433,6 +444,7 @@ class DensityMatrix(QuantumState):
 
         Args:
             instruction (qiskit.circuit.Instruction or QuantumCircuit): instruction or circuit
+            backend (str): array backend for density matrix.
 
         Returns:
             DensityMatrix: the final density matrix.
@@ -448,7 +460,7 @@ class DensityMatrix(QuantumState):
         num_qubits = instruction.num_qubits
         init = np.zeros((2**num_qubits, 2**num_qubits), dtype=complex)
         init[0, 0] = 1
-        vec = DensityMatrix(init, dims=num_qubits * (2, ))
+        vec = DensityMatrix(init, dims=num_qubits * (2, ), backend=backend)
         vec._append_instruction(instruction)
         return vec
 
@@ -531,7 +543,7 @@ class DensityMatrix(QuantumState):
                 )
             op_mat = other.data
             mat = np.dot(op_mat, self.data).dot(op_mat.T.conj())
-            return DensityMatrix(mat, dims=other._output_dims)
+            return DensityMatrix(mat, dims=other._output_dims, backend=self._backend)
         # Otherwise we are applying an operator only to subsystems
         # Check dimensions of subsystems match the operator
         if self.dims(qargs) != other.input_dims():
@@ -557,7 +569,7 @@ class DensityMatrix(QuantumState):
             new_dims[qubit] = other._output_dims[i]
         new_dim = np.product(new_dims)
         return DensityMatrix(np.reshape(tensor, (new_dim, new_dim)),
-                             dims=new_dims)
+                             dims=new_dims, backend=self._backend)
 
     def _append_instruction(self, other, qargs=None):
         """Update the current Statevector by applying an instruction."""
@@ -637,12 +649,12 @@ class DensityMatrix(QuantumState):
         evals, evecs = np.linalg.eig(self._data)
 
         nonzero_evals = evals[abs(evals) > atol]
-        if len(nonzero_evals) != 1 or not np.isclose(nonzero_evals[0], 1,
-                                                     atol=atol, rtol=rtol):
+        if len(nonzero_evals) != 1 or not np.isclose(
+                nonzero_evals[0], 1, atol=atol, rtol=rtol):
             raise QiskitError("Density matrix is not a pure state")
 
         psi = evecs[:, np.argmax(evals)]  # eigenvectors returned in columns.
-        return Statevector(psi)
+        return Statevector(psi, backend=self._backend)
 
     def to_counts(self):
         """Returns the density matrix as a counts dict of probabilities.
