@@ -143,3 +143,7 @@ from .synthesis import (OneQubitEulerDecomposer, TwoQubitBasisDecomposer,
                         two_qubit_cnot_decompose, euler_angles_1q)
 
 from .analysis import hellinger_fidelity
+
+# Import Array dispatch tools
+from .dispatch import Array
+from . import dispatch
