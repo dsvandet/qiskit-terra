@@ -57,6 +57,9 @@ class Stinespring(QuantumChannel):
            `arXiv:1111.6950 [quant-ph] <https://arxiv.org/abs/1111.6950>`_
     """
 
+    def __qiskit_operator__(self):
+        return self.to_operator()
+
     def __init__(self, data, input_dims=None, output_dims=None):
         """Initialize a quantum channel Stinespring operator.
 

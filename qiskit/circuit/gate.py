@@ -39,6 +39,17 @@ class Gate(Instruction):
         self.definition = None
         super().__init__(name, num_qubits, 0, params)
 
+    def __array__(self):
+        # pylint: disable=assignment-from-no-return
+        mat = self.to_matrix()
+        return mat
+
+    def __qiskit_matrix__(self):
+        # pylint: disable=assignment-from-no-return
+        from qiskit.quantum_info.operators.matrix import Matrix
+        mat = self.to_matrix()
+        return Matrix(mat, num_qubits=self.num_qubits)
+
     def to_matrix(self) -> np.ndarray:
         """Return a Numpy.array for the gate unitary matrix.
 

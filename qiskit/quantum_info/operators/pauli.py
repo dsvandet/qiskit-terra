@@ -65,6 +65,17 @@ class Pauli:
     Phys. Rev. A 68, 042318 – Published 20 October 2003
     """
 
+    def __array__(self):
+        return self.to_matrix()
+
+    def __qiskit_array__(self):
+        from qiskit.quantum_info.dispatch import Array
+        return Array(self.to_matrix())
+
+    def __qiskit_matrix__(self):
+        from qiskit.quantum_info.operators.matrix import Matrix
+        return Matrix(self.to_matrix(), num_qubits=self.num_qubits)
+
     def __init__(self, z=None, x=None, label=None):
         r"""Make the Pauli object.
 

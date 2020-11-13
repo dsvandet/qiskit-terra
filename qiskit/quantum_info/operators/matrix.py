@@ -33,7 +33,6 @@ def implements(np_function, container):
     return decorator
 
 
-@ArrayDispatch.register
 class Matrix(BaseOperator):
     r"""Matrix operator class
 

@@ -50,6 +50,24 @@ class Chi(QuantumChannel):
            `arXiv:1111.6950 [quant-ph] <https://arxiv.org/abs/1111.6950>`_
     """
 
+    def __array__(self):
+        return self.data
+
+    def __qiskit_matrix__(self):
+        from qiskit.quantum_info.operators.matrix import Matrix
+        # TODO: this should always be num_qubit operator
+        if self.num_qubits:
+            return Matrix(self.data, num_qubits=2 * self.num_qubits)
+        return Matrix(self.data, input_dims=self._input_dims * 2,
+                      output_dims=self._output_dims * 2)
+
+    def __qiskit_array__(self):
+        from qiskit.quantum_info.dispatch import Array
+        return Array(self.data)
+
+    def __qiskit_operator__(self):
+        return self.to_operator()
+
     def __init__(self, data, input_dims=None, output_dims=None):
         """Initialize a quantum channel Chi-matrix operator.
 

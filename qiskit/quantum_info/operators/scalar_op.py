@@ -32,6 +32,20 @@ class ScalarOp(BaseOperator):
     :meth:`tensor`, :meth:`expand` methods.
     """
 
+    def __array__(self):
+        return self.to_matrix()
+
+    def __qiskit_array__(self):
+        from qiskit.quantum_info.dispatch import Array
+        return Array(self.to_matrix())
+
+    def __qiskit_matrix__(self):
+        from qiskit.quantum_info.operators.matrix import Matrix
+        return Matrix(self.__qiskit_array__(),
+                      input_dims=self._input_dims,
+                      output_dims=self._output_dims,
+                      num_qubits=self._num_qubits)
+
     def __init__(self, dims=None, coeff=1):
         """Initialize an operator object.
 

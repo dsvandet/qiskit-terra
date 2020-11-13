@@ -41,6 +41,17 @@ class SparsePauliOp(BaseOperator):
     the :attr:`~SparsePauliOp.coeffs` attribute.
     """
 
+    def __array__(self):
+        return self.to_matrix()
+
+    def __qiskit_array__(self):
+        from qiskit.quantum_info.dispatch import Array
+        return Array(self.to_matrix())
+
+    def __qiskit_matrix__(self):
+        from qiskit.quantum_info.operators.matrix import Matrix
+        return Matrix(self.to_matrix(), num_qubits=self.num_qubits)
+
     def __init__(self, data, coeffs=None):
         """Initialize an operator object.
 
