@@ -273,12 +273,12 @@ class TestOperator(OperatorTestCase):
         with self.subTest("Deep copy"):
             orig = Operator(mat)
             cpy = orig.copy()
-            cpy._data[0, 0] = 0.0
+            cpy.data[0, 0] = 0.0
             self.assertFalse(cpy == orig)
         with self.subTest("Shallow copy"):
             orig = Operator(mat)
             clone = copy.copy(orig)
-            clone._data[0, 0] = 0.0
+            clone.data[0, 0] = 0.0
             self.assertTrue(clone == orig)
 
     def test_is_unitary(self):
@@ -526,12 +526,6 @@ class TestOperator(OperatorTestCase):
         op12 = Operator(mat1).tensor(Operator(mat2))
         self.assertEqual(op12.dim, (6, 6))
         assert_allclose(op12.data, Operator(mat12).data)
-
-    def test_power_except(self):
-        """Test power method raises exceptions."""
-        op = Operator(self.rand_matrix(3, 3))
-        # Non-integer power raises error
-        self.assertRaises(QiskitError, op.power, 0.5)
 
     def test_add(self):
         """Test add method."""

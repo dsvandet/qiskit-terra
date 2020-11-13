@@ -99,10 +99,19 @@ class BaseOperator(metaclass=AbstractTolerancesMeta):
         elif input_dims is not None and output_dims is not None:
             self._set_dims(input_dims, output_dims)
 
-    def __call__(self, qargs):
+    def _copy_attributes(self, other):
+        """Copy dimension information from another BaseOperator"""
+        self._qargs = other._qargs
+        self._num_qubits = other._num_qubits
+        self._input_dims = other._input_dims
+        self._output_dims = other._output_dims
+        self._num_input = other._num_input
+        self._num_output = other._num_output
+
+    def __call__(self, *qargs):
         """Return a clone with qargs set"""
-        if isinstance(qargs, int):
-            qargs = [qargs]
+        if len(qargs) == 1 and isinstance(qargs[0], (tuple, list)):
+            qargs = tuple(qargs[0])
         n_qargs = len(qargs)
         # We don't know if qargs will be applied to input our output
         # dimensions so we just check it matches one of them.
