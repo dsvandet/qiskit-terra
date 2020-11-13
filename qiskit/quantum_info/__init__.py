@@ -116,6 +116,7 @@ Synthesis
    euler_angles_1q
 """
 
+from .operators.matrix import Matrix
 from .operators import Operator, ScalarOp
 from .operators.pauli import Pauli, pauli_group
 from .operators.quaternion import Quaternion
