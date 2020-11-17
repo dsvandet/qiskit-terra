@@ -11,10 +11,10 @@
 # that they have been altered from the originals.
 """Functions for working with Array dispatch."""
 
-from typing import Union, Tuple
+from functools import wraps
+from types import FunctionType
 
 from .array import Array
-from .dispatch import Dispatch
 
 
 def wrap(func: callable, wrap_return: bool = False) -> callable:
@@ -28,14 +28,14 @@ def wrap(func: callable, wrap_return: bool = False) -> callable:
     Returns:
         callable: The wrapped function.
     """
-
+    @wraps(func)
     def wrapped_function(*args, **kwargs):
 
         # Recursive wrap function arguments
-        args = tuple(_wrap_function(x) if isinstance(x, type(lambda: 1))
+        args = tuple(_wrap_function(x) if isinstance(x, FunctionType)
                      else x for x in args)
         kwargs = dict((key, _wrap_function(val))
-                      if isinstance(val, type(lambda: 1))
+                      if isinstance(val, FunctionType)
                       else (key, val) for key, val in kwargs.items())
 
         # Evaluate unwrapped function
@@ -43,26 +43,15 @@ def wrap(func: callable, wrap_return: bool = False) -> callable:
 
         # Optional wrap array return types back to Arrays
         if wrap_return:
-            result = _wrap_return(result)
+            result = Array._wrap(result)
         return result
 
     return wrapped_function
 
 
-def _wrap_return(result: Union[any, Tuple[any]]) -> Union[any, Tuple[any]]:
-    """Wrap return array backend objects as Array objects"""
-    if isinstance(result, tuple):
-        result = tuple(Array(x)
-                       if isinstance(x, Dispatch.REGISTERED_TYPES)
-                       else x for x in result)
-    elif isinstance(result, Dispatch.REGISTERED_TYPES):
-        result = Array(result)
-    return result
-
-
 def _wrap_function(func: callable) -> callable:
     """Wrap a function to handle Array-like inputs and returns"""
-
+    @wraps(func)
     def wrapped_function(*args, **kwargs):
 
         # Unwrap inputs

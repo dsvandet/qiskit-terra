@@ -21,7 +21,7 @@ try:
 
     from ..dispatch import Dispatch
     import numpy as np
-    from .numpy import numpy_repr
+    from .numpy import _numpy_repr
 
     __all__ = []
 
@@ -41,7 +41,7 @@ try:
     @Dispatch.register_repr('jax')
     def _jax_repr(array, prefix='', suffix=''):
         """Wrapper for showing DeviceArray"""
-        return numpy_repr(array._value, prefix=prefix, suffix=suffix)
+        return _numpy_repr(array._value, prefix=prefix, suffix=suffix)
 
 
     @Dispatch.register_array_ufunc('jax')

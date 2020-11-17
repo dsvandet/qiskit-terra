@@ -11,7 +11,9 @@
 # that they have been altered from the originals.
 """Array Class"""
 
-from typing import Optional
+from functools import wraps
+from types import BuiltinMethodType, MethodType
+from typing import Optional, Union, Tuple
 from numbers import Number
 
 import numpy
@@ -126,21 +128,18 @@ class Array(NDArrayOperatorsMixin):
     def __getattr__(self, name: str) -> any:
         """Get attribute of wrapped array and convert to an Array."""
         # Call attribute on inner array object
-        result = getattr(self._data, name)
+        attr = getattr(self._data, name)
 
-        # If return object is an Array backend type wrap result
-        # back into an Array
-        if isinstance(result, tuple):
-            tmp = tuple()
-            for i in result:
-                backend = Dispatch.backend(i)
-                tmp += (Array(i, backend=backend) if backend else i, )
-            result = tmp
-        else:
-            backend = Dispatch.backend(result)
-            if backend:
-                result = Array(result, backend=backend)
-        return result
+        # If attribute is a function wrap the return values
+        if isinstance(attr, (MethodType, BuiltinMethodType)):
+            @wraps(attr)
+            def wrapped_method(*args, **kwargs):
+                return self._wrap(attr(*args, **kwargs))
+
+            return wrapped_method
+
+        # If return object is a backend array wrap result
+        return self._wrap(attr)
 
     def __qiskit_array__(self):
         return self
@@ -171,11 +170,20 @@ class Array(NDArrayOperatorsMixin):
             raise TypeError('only size-1 Arrays can be converted to Python scalars')
         return complex(self._data)
 
+    @staticmethod
+    def _wrap(obj: Union[any, Tuple[any]],
+              backend: Optional[str] = None) -> Union[any, Tuple[any]]:
+        """Wrap return array backend objects as Array objects"""
+        if isinstance(obj, tuple):
+            return tuple(Array(x, backend=backend)
+                         if isinstance(x, Dispatch.REGISTERED_TYPES)
+                         else x for x in obj)
+        if isinstance(obj, Dispatch.REGISTERED_TYPES):
+            return Array(obj, backend=backend)
+        return obj
+
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """Dispatcher for numpy ufuncs to support the wrapped array backend."""
-        if method != '__call__':
-            return NotImplemented
-
         out = kwargs.get('out', ())
 
         for x in inputs + out:
@@ -198,19 +206,14 @@ class Array(NDArrayOperatorsMixin):
         dispatch_func = Dispatch.array_ufunc(backend, ufunc, method)
         if dispatch_func == NotImplemented:
             return NotImplemented
-
         result = dispatch_func(*inputs, **kwargs)
 
-        # Format Results
-        if isinstance(result, tuple):
-            # multiple return values
-            return tuple(Array(i, backend=backend) for i in result)
-        elif method == 'at':
-            # no return value
+        # Not sure what this case from Numpy docs is?
+        if method == 'at':
             return None
-        else:
-            # one return value
-            return Array(result, backend=backend)
+
+        # Wrap array results back into Array objects
+        return self._wrap(result, backend=self.backend)
 
     def __array_function__(self, func, types, args, kwargs):
         """Dispatcher for numpy array function to support the wrapped array backend."""
@@ -229,15 +232,4 @@ class Array(NDArrayOperatorsMixin):
         if dispatch_func == NotImplemented:
             return NotImplemented
         result = dispatch_func(*args, **kwargs)
-
-        # Format Results
-        if isinstance(result, tuple):
-            # multiple return values
-            return tuple(
-                Array(i, backend=backend
-                      ) if isinstance(i, Dispatch.REGISTERED_TYPES) else i
-                for i in result)
-        elif isinstance(result, Dispatch.REGISTERED_TYPES):
-            return Array(result, backend=backend)
-        else:
-            return result
+        return self._wrap(result, backend=self.backend)

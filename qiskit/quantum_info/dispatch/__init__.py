@@ -12,9 +12,6 @@
 
 """Array with numpy compatiblity and multiple backend support"""
 
-# Register backends
-from .backends import *
-
 # Import Array
 from .array import Array
 
@@ -27,3 +24,10 @@ from .dispatch import (set_default_backend,
                        available_backends,
                        backend_types,
                        asarray)
+
+# Register backends
+from .backends import *
+
+# If only one backend is available, set it as the default
+if len(available_backends()) == 1:
+    set_default_backend(available_backends()[0])
