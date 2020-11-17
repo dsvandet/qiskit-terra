@@ -42,8 +42,8 @@ class Array(NDArrayOperatorsMixin):
         * :attr`backend` which returns the backend string of hte wrapped array.
 
     All other attributes and methods of the wrapped array are accessable
-    through this class, however their return type will be converted to an
-    Array object rather.
+    through this class, but with any array return types wrapped into Array
+    objects.
     """
     def __init__(self,
                  data: any,
@@ -72,7 +72,6 @@ class Array(NDArrayOperatorsMixin):
                 raise ValueError('object __qiskit_array__ method is not producing an Array')
             self._data = array._data
             self._backend = array._backend
-            # Optionally convert backend, dtype, or order
             if dtype or order or (backend and backend != self._backend):
                 if backend is None:
                     backend = self._backend

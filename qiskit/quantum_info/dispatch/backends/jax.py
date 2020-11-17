@@ -47,10 +47,11 @@ try:
     @Dispatch.register_array_ufunc('jax')
     def _jax_array_ufunc(ufunc, method):
         """Wrapper mapping a numpy.ufunc to jax.numpy.ufunc"""
-        # pylint: disable=unused-argument
+        if method != '__call__':
+            return NotImplemented
         name = ufunc.__name__
         if hasattr(jax.numpy, name):
-            return getattr(jax.numpy, ufunc.__name__)
+            return getattr(jax.numpy, name)
         return NotImplemented
 
 
