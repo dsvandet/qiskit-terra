@@ -71,7 +71,8 @@ class Matrix(BaseOperator):
         if self.__class__ is Matrix:
             return self
         # This allows the function to also work for Matrix subclasses
-        return Matrix(self._array, input_dims=self._input_dims,
+        return Matrix(self._array,
+                      input_dims=self._input_dims,
                       output_dims=self._output_dims,
                       num_qubits=self.num_qubits)
 
@@ -109,11 +110,8 @@ class Matrix(BaseOperator):
             matrix = data.__qiskit_matrix__()
             if not isinstance(matrix, Matrix):
                 raise QiskitError('object __qiskit_matrix__ method not producing a Matrix')
-            self._array = matrix._array
+            self._array = Array(matrix.array, dtype=dtype, backend=backend)
             self._copy_attributes(matrix)
-            # Convert dtype and backend if specified
-            if backend or dtype:
-                self._array = asarray(self._array, dtype=dtype, backend=backend)
             return
 
         self._array = Array(data, dtype=dtype, backend=backend)

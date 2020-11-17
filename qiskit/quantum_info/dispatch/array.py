@@ -72,12 +72,19 @@ class Array(NDArrayOperatorsMixin):
                 raise ValueError('object __qiskit_array__ method is not producing an Array')
             self._data = array._data
             self._backend = array._backend
-        else:
-            self._data = asarray(data,
-                                 dtype=dtype,
-                                 order=order,
-                                 backend=backend)
-            self._backend = backend if backend else Dispatch.backend(self._data)
+            # Optionally convert backend, dtype, or order
+            if dtype or order or (backend and backend != self._backend):
+                if backend is None:
+                    backend = self._backend
+                else:
+                    self._backend = backend
+                self._data = asarray(
+                    self._data, dtype=dtype, order=order, backend=backend)
+            return
+
+        # Standard init
+        self._data = asarray(data, dtype=dtype, order=order, backend=backend)
+        self._backend = backend if backend else Dispatch.backend(self._data)
 
     @property
     def data(self):
