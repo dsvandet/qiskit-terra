@@ -45,12 +45,16 @@ class Dispatch:
     ARRAY_FUNCTION_DISPATCH = {}
 
     @classmethod
-    def backend(cls, array: any, fallback: Optional[str] = None) -> str:
+    def backend(cls, array: any, subclass: Optional[bool] = False,
+                fallback: Optional[str] = None) -> str:
         """Return the registered backend string of a array object.
 
         Args:
             array: an array object.
-            fallback: If this value if array type is not registered.
+            subclass: If True check if array type is a subclass of
+                      registered types.
+            fallback: Fallback backend to use if array does not match any
+                      registered types.
 
         Returns:
             str: The array backend name if the array type is registered,
@@ -63,6 +67,10 @@ class Dispatch:
         backend = cls._REGISTERED_TYPES.get(type(array), None)
         if backend is not None:
             return backend
+        if subclass:
+            for key, backend in cls._REGISTERED_TYPES.items():
+                if isinstance(array, key):
+                    return backend
         if fallback is None or fallback in cls._REGISTERED_BACKENDS:
             return fallback
         raise ValueError("fallback '{}' is not a registered backend.".format(fallback))

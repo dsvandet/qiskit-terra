@@ -83,7 +83,7 @@ class Array(NDArrayOperatorsMixin):
 
         # Standard init
         self._data = asarray(data, dtype=dtype, order=order, backend=backend)
-        self._backend = backend if backend else Dispatch.backend(self._data)
+        self._backend = backend if backend else Dispatch.backend(self._data, subclass=True)
 
     @property
     def data(self):

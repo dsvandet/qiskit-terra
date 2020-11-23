@@ -16,8 +16,18 @@
 try:
     import jax
     from jax.interpreters.xla import DeviceArray
+    from jax.core import Tracer
     from jax.interpreters.ad import JVPTracer
     from jax.interpreters.partial_eval import JaxprTracer
+
+    JAX_TYPES = (DeviceArray, Tracer, JaxprTracer, JVPTracer)
+
+    try:
+        # This class is not in older versions of Jax
+        from jax.interpreters.partial_eval import DynamicJaxprTracer
+        JAX_TYPES += (DynamicJaxprTracer, )
+    except ImportError:
+        pass
 
     from ..dispatch import Dispatch
     import numpy as np
@@ -29,7 +39,7 @@ try:
     HANDLED_FUNCTIONS = {}
 
 
-    @Dispatch.register_asarray('jax', (DeviceArray, JVPTracer, JaxprTracer))
+    @Dispatch.register_asarray('jax', JAX_TYPES)
     def _jax_asarray(array, dtype=None, order=None):
         """Wrapper for jax.numpy.asarray"""
         if isinstance(array, DeviceArray) and order is None and (
