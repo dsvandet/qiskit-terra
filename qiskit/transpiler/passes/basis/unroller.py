@@ -15,6 +15,7 @@
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.exceptions import QiskitError
 from qiskit.circuit import ControlledGate
+from qiskit.extensions.unitary import UnitaryGate
 from qiskit.converters.circuit_to_dag import circuit_to_dag
 
 
@@ -52,6 +53,7 @@ class Unroller(TransformationPass):
             return dag
         # Walk through the DAG and expand each non-basis node
         basic_insts = ['measure', 'reset', 'barrier', 'snapshot', 'delay']
+        supports_unitary = 'unitary' in self.basis
         for node in dag.op_nodes():
             if node.op._directive:
                 continue
@@ -67,6 +69,10 @@ class Unroller(TransformationPass):
                     pass
                 else:
                     continue
+            elif supports_unitary and hasattr(node.op, '__array__'):
+                # If backend supports arbitrary unitaries unroll gate to its matrix def
+                dag.substitute_node(node, UnitaryGate(node.op.to_matrix(), label=node.op.name))
+                continue
 
             # TODO: allow choosing other possible decompositions
             try:
