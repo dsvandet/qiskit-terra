@@ -22,10 +22,13 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.barrier import Barrier
 from qiskit.quantum_info.operators.base_operator import BaseOperator
 from qiskit.quantum_info.operators.mixins import AdjointMixin, MultiplyMixin
+from qiskit.quantum_info.operators.symplectic.pauli_rep import PauliRep
 
+class BasePauli(BaseOperator, AdjointMixin, MultiplyMixin, PauliRep):
+    r"""Phase symplectic representation of a list of N-qubit Paulis.
 
-class BasePauli(BaseOperator, AdjointMixin, MultiplyMixin):
-    r"""Symplectic representation of a list of N-qubit Paulis.
+    An array of k N-qubit Paulis represented in the '-iZX'
+        format:
 
     Base class for Pauli and PauliList.
     """
@@ -33,13 +36,19 @@ class BasePauli(BaseOperator, AdjointMixin, MultiplyMixin):
     def __init__(self, z, x, phase):
         """Initialize the BasePauli.
 
-        This is an array of M N-qubit Paulis defined as
-        P = (-i)^phase Z^z X^x.
+        An array of k N-qubit Paulis represented in the '-iZX'
+        format:
+        math::
+            P = (-i)^phase Z^z X^x.
+
+        Note that the <phase> variable is not the actual phase of the Pauli 
+        operator but the exponent of the when the true phase is encoded as
+        a power of :math:`-i`.
 
         Args:
-            z (np.ndarray): input z matrix.
-            x (np.ndarray): input x matrix.
-            phase (np.ndarray): input phase vector.
+            z (np.ndarray): input Z matrix.
+            x (np.ndarray): input X matrix.
+            phase (np.ndarray): input phase exponent vector.
         """
         self._z = z
         self._x = x
@@ -155,24 +164,23 @@ class BasePauli(BaseOperator, AdjointMixin, MultiplyMixin):
         ret._phase = np.mod(phase, 4)
         return ret
 
-    def _multiply(self, other):
+    def _multiply(self, other, roundit=True):
         """Return the {cls} other * self.
 
         Args:
-            other (complex): a complex number in ``[1, -1j, -1, 1j]``.
-
+            other (complex): a complex number(s) in ``[1, -1j, -1, 1j]``.
+            round (bool): Set True to round components of other. Default=True
         Returns:
             {cls}: the {cls} other * self.
 
         Raises:
             QiskitError: if the phase is not in the set ``[1, -1j, -1, 1j]``.
-        """.format(
-            cls=type(self).__name__
-        )
-        if isinstance(other, (np.ndarray, list, tuple)):
-            phase = np.array([self._phase_from_complex(phase) for phase in other])
-        else:
-            phase = self._phase_from_complex(other)
+        """.format(cls=type(self).__name__)
+        phase = self.coeff_to_exponent(
+                other,
+                output_phase_format=PauliRepBase.__INTERNAL_PHASE_REP_FORMAT__,
+                roundit=roundit
+            )
         return BasePauli(self._z, self._x, np.mod(self._phase + phase, 4))
 
     def conjugate(self):
@@ -185,7 +193,7 @@ class BasePauli(BaseOperator, AdjointMixin, MultiplyMixin):
     def transpose(self):
         """Return the transpose of each Pauli in the list."""
         # Transpose sets Y -> -Y. This has effect on changing the phase
-        parity_y = self._count_y() % 2
+        parity_y = self.count_y() % 2
         if np.all(parity_y == 0):
             return self
         return BasePauli(self._z, self._x, np.mod(self._phase + 2 * parity_y, 4))
@@ -282,9 +290,9 @@ class BasePauli(BaseOperator, AdjointMixin, MultiplyMixin):
         ret._phase = np.mod(self._phase + 2, 4)
         return ret
 
-    def _count_y(self):
+    def count_y(self):
         """Count the number of I Pauli's"""
-        return np.sum(np.logical_and(self._x, self._z), axis=1)
+        return self._count_y(self._x, self._z)
 
     @staticmethod
     def _stack(array, size, vertical=True):
@@ -294,149 +302,6 @@ class BasePauli(BaseOperator, AdjointMixin, MultiplyMixin):
         if vertical:
             return np.vstack(size * [array]).reshape((size * len(array),) + array.shape[1:])
         return np.hstack(size * [array]).reshape((size * len(array),) + array.shape[1:])
-
-    @staticmethod
-    def _phase_from_complex(coeff):
-        """Return the phase from a label"""
-        if np.isclose(coeff, 1):
-            return 0
-        if np.isclose(coeff, -1j):
-            return 1
-        if np.isclose(coeff, -1):
-            return 2
-        if np.isclose(coeff, 1j):
-            return 3
-        raise QiskitError("Pauli can only be multiplied by 1, -1j, -1, 1j.")
-
-    @staticmethod
-    def _from_array(z, x, phase=0):
-        """Convert array data to BasePauli data."""
-        if isinstance(z, np.ndarray) and z.dtype == bool:
-            base_z = z
-        else:
-            base_z = np.asarray(z, dtype=bool)
-        if base_z.ndim == 1:
-            base_z = base_z.reshape((1, base_z.size))
-        elif base_z.ndim != 2:
-            raise QiskitError("Invalid Pauli z vector shape.")
-
-        if isinstance(x, np.ndarray) and x.dtype == bool:
-            base_x = x
-        else:
-            base_x = np.asarray(x, dtype=bool)
-        if base_x.ndim == 1:
-            base_x = base_x.reshape((1, base_x.size))
-        elif base_x.ndim != 2:
-            raise QiskitError("Invalid Pauli x vector shape.")
-
-        if base_z.shape != base_x.shape:
-            raise QiskitError("z and x vectors are different size.")
-
-        # Convert group phase convention to internal ZX-phase conversion.
-        base_phase = np.mod(np.sum(np.logical_and(base_x, base_z), axis=1, dtype=int) + phase, 4)
-        return base_z, base_x, base_phase
-
-    @staticmethod
-    def _to_matrix(z, x, phase=0, group_phase=False, sparse=False):
-        """Return the matrix matrix from symplectic representation.
-
-        The Pauli is defined as :math:`P = (-i)^{phase + z.x} * Z^z.x^x`
-        where ``array = [x, z]``.
-
-        Args:
-            z (array): The symplectic representation z vector.
-            x (array): The symplectic representation x vector.
-            phase (int): Pauli phase.
-            group_phase (bool): Optional. If True use group-phase convention
-                                instead of BasePauli ZX-phase convention.
-                                (default: False).
-            sparse (bool): Optional. Of True return a sparse CSR matrix,
-                           otherwise return a dense Numpy array
-                           (default: False).
-
-        Returns:
-            array: if sparse=False.
-            csr_matrix: if sparse=True.
-        """
-        num_qubits = z.size
-
-        # Convert to zx_phase
-        if group_phase:
-            phase += np.sum(x & z)
-            phase %= 4
-
-        dim = 2 ** num_qubits
-        twos_array = 1 << np.arange(num_qubits)
-        x_indices = np.asarray(x).dot(twos_array)
-        z_indices = np.asarray(z).dot(twos_array)
-
-        indptr = np.arange(dim + 1, dtype=np.uint)
-        indices = indptr ^ x_indices
-        if phase:
-            coeff = (-1j) ** phase
-        else:
-            coeff = 1
-        data = np.array([coeff * (-1) ** (bin(i).count("1") % 2) for i in z_indices & indptr])
-        if sparse:
-            # Return sparse matrix
-            from scipy.sparse import csr_matrix
-
-            return csr_matrix((data, indices, indptr), shape=(dim, dim), dtype=complex)
-
-        # Build dense matrix using csr format
-        mat = np.zeros((dim, dim), dtype=complex)
-        for i in range(dim):
-            mat[i][indices[indptr[i] : indptr[i + 1]]] = data[indptr[i] : indptr[i + 1]]
-        return mat
-
-    @staticmethod
-    def _to_label(z, x, phase, group_phase=False, full_group=True, return_phase=False):
-        """Return the label string for a Pauli.
-
-        Args:
-            z (array): The symplectic representation z vector.
-            x (array): The symplectic representation x vector.
-            phase (int): Pauli phase.
-            group_phase (bool): Optional. If True use group-phase convention
-                                instead of BasePauli ZX-phase convention.
-                                (default: False).
-            full_group (bool): If True return the Pauli label from the full Pauli group
-                including complex coefficient from [1, -1, 1j, -1j]. If
-                False return the unsigned Pauli label with coefficient 1
-                (default: True).
-            return_phase (bool): If True return the adjusted phase for the coefficient
-                of the returned Pauli label. This can be used even if
-                ``full_group=False``.
-
-        Returns:
-            str: the Pauli label from the full Pauli group (if ``full_group=True``) or
-                from the unsigned Pauli group (if ``full_group=False``).
-            Tuple[str, int]: if ``return_phase=True`` returns a tuple of the Pauli
-                            label (from either the full or unsigned Pauli group) and
-                            the phase ``q`` for the coefficient :math:`(-i)^(q + x.z)`
-                            for the label from the full Pauli group.
-        """
-        num_qubits = z.size
-        coeff_labels = {0: "", 1: "-i", 2: "-", 3: "i"}
-        label = ""
-        for i in range(num_qubits):
-            if not z[num_qubits - 1 - i]:
-                if not x[num_qubits - 1 - i]:
-                    label += "I"
-                else:
-                    label += "X"
-            elif not x[num_qubits - 1 - i]:
-                label += "Z"
-            else:
-                label += "Y"
-                if not group_phase:
-                    phase -= 1
-        phase %= 4
-        if phase and full_group:
-            label = coeff_labels[phase] + label
-        if return_phase:
-            return label, phase
-        return label
 
     def _append_circuit(self, circuit, qargs=None):
         """Update BasePauli inplace by applying a Clifford circuit.

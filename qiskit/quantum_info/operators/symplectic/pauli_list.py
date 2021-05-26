@@ -97,12 +97,46 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
     # Set the max number of qubits * paulis before string truncation
     __truncate__ = 2000
 
-    def __init__(self, data):
+    def __init__(self, data=None, *, z=None, x=None, phase=None, id=None, method=None):
         """Initialize the PauliList.
 
         Args:
             data (Pauli or list): input data for Paulis. If input is a list each item in the list
                                   must be a Pauli object or Pauli str.
+
+        Args:
+            data ([type], optional): [description]. Defaults to None.
+            z ([type], optional): [description]. Defaults to None.
+            x ([type], optional): [description]. Defaults to None.
+            phases ([type], optional): [description]. Defaults to None.
+            method ([type], optional): [description]. Defaults to None. 
+
+        Examples:
+
+            method=None input types
+            =======================
+            PauliList()
+
+            PauliList(<tuple>) : Tuple is (z,x,phases) or (z,x)
+            PauliList(<PauliList>)
+            PauliList(<PauliTable>)
+            PauliList(<StabilizerTable>)
+            PauliList(<list of Paulis>)
+            PauliList(<list of Pauli strings>)
+            PauliList(<BasePauli>/<Pauli>)
+            PauliList(<np.ndarray of Paulis>)
+            PauliList(<np.ndarary of Pauli strings>)
+            ...
+
+            PauliList(x=np.ndarray, z=np.ndarray, phase=np.ndarray)
+
+            method='lookup' input types
+            =======================
+            PauliList(id=str, method='lookup')
+
+            method='gui' input types
+            =======================
+            PauliList(method='gui')       
 
         Raises:
             QiskitError: if input array is invalid shape.
@@ -111,38 +145,74 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
             The input array is not copied so multiple Pauli tables
             can share the same underlying array.
         """
-        if isinstance(data, BasePauli):
-            base_z, base_x, base_phase = data._z, data._x, data._phase
-        elif isinstance(data, StabilizerTable):
-            # Conversion from legacy StabilizerTable
-            base_z, base_x, base_phase = self._from_array(data.Z, data.X, 2 * data.phase)
-        elif isinstance(data, PauliTable):
-            # Conversion from legacy PauliTable
-            base_z, base_x, base_phase = self._from_array(data.Z, data.X)
+        self.empty = False
+        if method is None:
+            if data is None and z is None:
+                # Generate an empty PauliList
+                self.empty = True
+            elif data is None:
+                # Conversion from keyword input
+                if x is not None:
+                    if phase is None:
+                        array_z, array_x, array_phase = self.from_array(z, x)
+                    else:
+                        array_z, array_x, array_phase = self.from_array(z, x, phase)
+                else:
+                    raise QiskitError("Both x and z must be provided")
+            elif isinstance(data, BasePauli):
+                # TODO: add a internal_phase property to BasePauli so that we do not have
+                # to access the private variable _phase
+                array_z, array_x, array_phase = data.z, data.x, data._phase
+            elif isinstance(data, tuple):
+                if len(data) not in [2, 3]:
+                    raise QiskitError(
+                        "Invalid input tuple for Pauli, input tuple must be"
+                        " `(z, x, phase)` or `(z, x)`"
+                    )
+                array_z, array_x, array_phase = self._from_array(*data)
+            elif isinstance(data, StabilizerTable):
+                # Conversion from legacy StabilizerTable
+                array_z, array_x, array_phase = self._from_array(data.Z, data.X, 2 * data.phase)
+            elif isinstance(data, PauliTable):
+                # Conversion from legacy PauliTable
+                array_z, array_x, array_phase = self._from_array(data.Z, data.X)
+            else:
+                # Conversion as iterable of Paulis
+                array_z, array_x, array_phase = self._from_paulis(data)
+        elif method == 'lookup':
+            if id is None:
+                raise QiskitError("The PauliList id missing.")
+            else:
+                raise NotImplementedError
+        elif method == 'gui':
+            raise NotImplementedError
         else:
-            # Conversion as iterable of Paulis
-            base_z, base_x, base_phase = self._from_paulis(data)
+            raise QiskitError("Unknown or unsupported input")
 
         # Initialize BasePauli
-        super().__init__(base_z, base_x, base_phase)
+        if self.empty is not True:
+            super().__init__(array_z, array_x, array_phase)
+        else:
+            self.num_paulis = 0
+            self.num_qubits = 0
 
     # ---------------------------------------------------------------------
     # Representation conversions
     # ---------------------------------------------------------------------
 
     def __array__(self, dtype=None):
-        """Convert to numpy array"""
+        """Custome numpy array container: Convert to numpy array"""
         # pylint: disable=unused-argument
         shape = (len(self),) + 2 * (2 ** self.num_qubits,)
-        ret = np.zeros(shape, dtype=complex)
+        result = np.zeros(shape, dtype=complex)
         for i, mat in enumerate(self.matrix_iter()):
-            ret[i] = mat
-        return ret
+            result[i] = mat
+        return result
 
     @staticmethod
     def _from_paulis(data):
         """Construct a PauliList from a list of Pauli data.
-
+        
         Args:
             data (iterable): list of Pauli data.
 
@@ -153,11 +223,11 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
             QiskitError: If the input list is empty or contains invalid
             Pauli strings.
         """
-        if not isinstance(data, (list, tuple, set, np.ndarray)):
+        if not isinstance(data, (list, tuple, np.ndarray, set)):
             data = [data]
         num_paulis = len(data)
         if num_paulis == 0:
-            raise QiskitError("Input Pauli list is empty.")
+            return None, None, None
         paulis = []
         for i in data:
             if not isinstance(i, Pauli):
@@ -165,14 +235,14 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
             else:
                 paulis.append(i)
         num_qubits = paulis[0].num_qubits
-        base_z = np.zeros((num_paulis, num_qubits), dtype=bool)
-        base_x = np.zeros((num_paulis, num_qubits), dtype=bool)
-        base_phase = np.zeros(num_paulis, dtype=int)
+        array_z = np.zeros((num_paulis, num_qubits), dtype=bool)
+        array_x = np.zeros((num_paulis, num_qubits), dtype=bool)
+        array_phase = np.zeros(num_paulis, dtype=np.int8)
         for i, pauli in enumerate(paulis):
-            base_z[i] = pauli._z
-            base_x[i] = pauli._x
-            base_phase[i] = pauli._phase
-        return base_z, base_x, base_phase
+            array_z[i] = pauli._z
+            array_x[i] = pauli._x
+            array_phase[i] = pauli._phase
+        return array_z, array_x, array_phase
 
     def __repr__(self):
         """Display representation."""
@@ -183,6 +253,7 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
         return self._truncated_str(False)
 
     def _truncated_str(self, show_class):
+        """Truncate string representations if desired"""
         stop = self._num_paulis
         if self.__truncate__:
             max_paulis = self.__truncate__ // self.num_qubits
@@ -199,6 +270,10 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
             np.array(labels), threshold=stop + 1, separator=", ", prefix=prefix, suffix=suffix
         )
         return prefix + list_str[:-1] + suffix
+
+    # ---------------------------------------------------------------------
+    # Comparisions
+    # ---------------------------------------------------------------------
 
     def __eq__(self, other):
         """Entrywise comparison of Pauli equality."""
@@ -227,18 +302,54 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
     # ---------------------------------------------------------------------
     @property
     def phase(self):
-        """Return the phase exponent of the PauliList."""
-        # Convert internal ZX-phase convention to group phase convention
-        return np.mod(self._phase - self._count_y(), 4)
+        """Return the external phase exponents of the PauliList."""
+        # Convert the internal phase expoents to external phase exponents
+        phase = self.change_representation(
+            self._phase,
+            y_count = self._count_y(self.x, self.z),
+        )
+
+        return phase
 
     @phase.setter
     def phase(self, value):
-        # Convert group phase convetion to internal ZX-phase convention
-        self._phase[:] = np.mod(value + self._count_y(), 4)
+        """Set the phase exponents of the PauliList. Input phase
+        exponents should be in __external_pauli_rep_format__"""
+        # Convert external phase exponents to the internal phases exponents
+        self._phase[:] = self.change_representation(
+            value,
+            y_count = self._count_y(self.x, self.z)
+        )
+
+    @property
+    def coeff(self):
+        """Return the actual complex phase coefficients of a PauliList 
+        - not phase exponents"""
+        phase = self.convert_phase_exponent(
+            self._phase, 
+            self.internal_pauli_format(),
+            self.external_pauli_format())
+        return self._exponent_to_coeff(phase, self.external_pauli_format())
+
+    @coeff.setter
+    def coeff(self, value):
+        """Set the complex phase coefficients for the PauliList"""
+        if all(coeff not in [1,0-1j,-1,1j] for coeff in value):
+            raise QiskitError("Coefficient must be one of 1, -1, i, -i")
+        phase = self._coeff_to_exponent(value, self.external_phase_format)
+        self._phase[:] = self.convert_phase_exponent(
+            phase,
+            self.external_pauli_format,
+            self.internal_pauli_format)
+
+    @property
+    def order(self):
+        """Return the group orders of the elements of the PauliList"""
+        return self._order()
 
     @property
     def x(self):
-        """The x array for the symplectic representation."""
+        """The X array for the symplectic representation."""
         return self._x
 
     @x.setter
@@ -247,12 +358,49 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
 
     @property
     def z(self):
-        """The z array for the symplectic representation."""
+        """The Z array for the symplectic representation."""
         return self._z
 
     @z.setter
     def z(self, val):
         self._z[:] = val
+
+    @property
+    def y(self):
+        """The Y array form the symplectic representation."""
+        return np.logical_and(self._z, self._x)
+
+    @property
+    def phase_rep_format(self):
+        """Return the current external phase format."""
+        return self.external_phase_format
+
+    @phase_rep_format.setter
+    def phase_rep_format(self, rep_format):
+        """Set the external phase format"""
+        self.set_formats(phase_format=rep_format)
+
+    @property
+    def symp_rep_format(self):
+        """Return the external symplectic format"""
+        return self.external_symp_format
+
+    @symp_rep_format.setter
+    def symp_rep_format(self, rep_format):
+        """Set the external symplectic representation format"""
+        self.set_formats(symp_format=rep_format)
+
+    @property
+    def pauli_rep_format(self):
+        return self.external_pauli_format
+
+    @pauli_rep_format.setter
+    def pauli_rep_format(self, rep_format):
+        """Set the external pauli representation format"""
+        if rep_format not in self.phase_formats:
+            raise QiskitError("Not a supported Pauli representation")
+        phase_format, symp_format = self._split_rep(rep_format)
+        self.set_formats(phase_format=phase_format, symp_format=symp_format)
 
     # ---------------------------------------------------------------------
     # Size Properties
@@ -604,6 +752,25 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
         if len(ret) == 1:
             return ret[0]
         return ret
+
+    def _order(self):
+        _IENC = {1:1, -1:2, 1j:4, 0-1j:4}
+        _NENC = {1:2, -1:2, 1j:4, 0-1j:4}
+        phase = self.convert_phase_exponent(
+            self._phase, 
+            self.__INTERNAL_PAULI_REP_FROMAT__, 
+            'iYZX')
+        order = np.zeros(self.num_paulis, dtype=np.int8)
+        identities_z = np.asarray([(np.all(rowz==0) for rowz in self._z)])
+        identities_x = np.asarray([(np.all(rowx==0) for rowx in self._x)])
+        identities = np.logical_and(identities_z, identities_x).nonzero()[0]
+        identities = identities.nonzero()[0]
+        for r in range(self.num_paulis):
+            if r in identities:
+                order[r]=_IENC[phase][r]
+            else:
+                order[r]=_NENC[phase][r]
+        return order
 
     # ---------------------------------------------------------------------
     # BaseOperator methods

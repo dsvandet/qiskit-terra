@@ -252,12 +252,12 @@ class Pauli(BasePauli):
     def phase(self):
         """Return the group phase exponent for the Pauli."""
         # Convert internal ZX-phase convention of BasePauli to group phase
-        return np.mod(self._phase - self._count_y(), 4)[0]
+        return np.mod(self._phase - self.count_y(), 4)[0]
 
     @phase.setter
     def phase(self, value):
         # Convert group phase convention to internal ZX-phase convention
-        self._phase[:] = np.mod(value + self._count_y(), 4)
+        self._phase[:] = np.mod(value + self.count_y(), 4)
 
     @property
     def x(self):

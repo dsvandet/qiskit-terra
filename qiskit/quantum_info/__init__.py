@@ -120,7 +120,7 @@ Synthesis
    decompose_clifford
 """
 
-from .operators import Operator, ScalarOp, Pauli, Clifford, SparsePauliOp
+from .operators import Operator, ScalarOp, Pauli, PauliRep, Clifford, SparsePauliOp
 from .operators import PauliList, PauliTable, StabilizerTable, pauli_basis, pauli_group
 from .operators.channel import Choi, SuperOp, Kraus, Stinespring, Chi, PTM
 from .operators.measures import process_fidelity, average_gate_fidelity, gate_error, diamond_norm

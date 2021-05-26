@@ -14,6 +14,7 @@
 Symplectic Operators
 """
 
+from .pauli_rep import PauliRep
 from .pauli import Pauli
 from .pauli_table import PauliTable
 from .pauli_list import PauliList
