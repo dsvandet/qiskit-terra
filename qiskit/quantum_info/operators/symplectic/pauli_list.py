@@ -160,9 +160,10 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
                 else:
                     raise QiskitError("Both x and z must be provided")
             elif isinstance(data, BasePauli):
-                # TODO: add a internal_phase property to BasePauli so that we do not have
-                # to access the private variable _phase
-                array_z, array_x, array_phase = data.z, data.x, data._phase
+                # TODO: should not use internal "private" varibles. data.x and data.z
+                # cannot be used for single Pauli's and the shapes are differnt
+                # between data.x and data._x in this case. 
+                array_z, array_x, array_phase = data._z, data._x, data._phase
             elif isinstance(data, tuple):
                 if len(data) not in [2, 3]:
                     raise QiskitError(
@@ -194,7 +195,7 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
             super().__init__(array_z, array_x, array_phase)
         else:
             self.num_paulis = 0
-            self.num_qubits = 0
+            #self.num_qubits = 0
 
     # ---------------------------------------------------------------------
     # Representation conversions
@@ -307,6 +308,7 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
         phase = self.change_representation(
             self._phase,
             y_count = self._count_y(self.x, self.z),
+            direction='out'
         )
 
         return phase
@@ -318,12 +320,13 @@ class PauliList(BasePauli, LinearMixin, GroupMixin):
         # Convert external phase exponents to the internal phases exponents
         self._phase[:] = self.change_representation(
             value,
-            y_count = self._count_y(self.x, self.z)
+            y_count = self._count_y(self.x, self.z),
+            direction='in'
         )
 
     @property
     def coeff(self):
-        """Return the actual complex phase coefficients of a PauliList 
+        """Return the actual complex phase coefficients of a PauliList
         - not phase exponents"""
         phase = self.convert_phase_exponent(
             self._phase, 

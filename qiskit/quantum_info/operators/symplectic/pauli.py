@@ -27,6 +27,7 @@ from qiskit.circuit.library.standard_gates import IGate, XGate, YGate, ZGate
 from qiskit.circuit.library.generalized_gates import PauliGate
 from qiskit.circuit.barrier import Barrier
 from qiskit.quantum_info.operators.mixins import generate_apidocs
+from qiskit.quantum_info.operators.symplectic.pauli_rep import PauliRep
 
 
 class Pauli(BasePauli):
@@ -146,7 +147,7 @@ class Pauli(BasePauli):
     # Set the max Pauli string size before truncation
     __truncate__ = 50
 
-    def __init__(self, data=None, x=None, *, z=None, label=None):
+    def __init__(self, data=None,  x=None, *, z=None, phase=None, label=None):
         """Initialize the Pauli.
 
         When using the symplectic array input data both z and x arguments must
@@ -179,15 +180,27 @@ class Pauli(BasePauli):
             base_z, base_x, base_phase = self._from_scalar_op(data)
         elif isinstance(data, (QuantumCircuit, Instruction)):
             base_z, base_x, base_phase = self._from_circuit(data)
-        elif x is not None:  # DEPRECATED
-            if z is None:
-                # Using old Pauli initialization with positional args instead of kwargs
-                z = data
-            base_z, base_x, base_phase = self._from_array_deprecated(z, x)
         elif label is not None:  # DEPRECATED
             base_z, base_x, base_phase = self._from_label_deprecated(label)
+        elif data is not None:
+            # DEPRECATE this approach for non keyword-only setup (i.e. just z,x ...)
+            if x is not None:
+                if z is None:
+                    # Using old Pauli initialization with positional args instead of kwargs
+                    z = data
+                else:
+                    raise QiskitError("Invalid input data for Pauli.")
+                base_z, base_x, base_phase = self._from_array_deprecated(z, x, phase)
+            else:
+                raise QiskitError("Invalid input data for Pauli.")
         else:
-            raise QiskitError("Invalid input data for Pauli.")
+            # data is None.
+            # Check for keyword-only input. With deprecated options
+            # still in place the x input is not keyword-only. This should change
+            # once the deprecated options have been removed.
+            if (x is None) or (z is None):
+                raise QiskitError("Invalid input data for Pauli.")
+            base_z, base_x, base_phase = self._from_array_deprecated(z, x, phase)
 
         # Initialize BasePauli
         if base_z.shape[0] != 1:
@@ -252,12 +265,21 @@ class Pauli(BasePauli):
     def phase(self):
         """Return the group phase exponent for the Pauli."""
         # Convert internal ZX-phase convention of BasePauli to group phase
-        return np.mod(self._phase - self.count_y(), 4)[0]
+        return self.change_representation(
+            self._phase,
+            y_count=self.count_y(),
+            direction='out'
+        )
 
     @phase.setter
     def phase(self, value):
-        # Convert group phase convention to internal ZX-phase convention
-        self._phase[:] = np.mod(value + self.count_y(), 4)
+        # Convert external phase format to internal phase format
+
+        self._phase[:] = self.change_representation(
+            value,
+            self.count_y(),
+            direction='in'
+        )
 
     @property
     def x(self):
@@ -732,10 +754,12 @@ class Pauli(BasePauli):
         "version 0.17.0 and will be removed no earlier than 3 months after "
         "the release date. Use tuple initialization `Pauli((z, x))` instead."
     )
-    def _from_array_deprecated(cls, z, x):
+    def _from_array_deprecated(cls, z, x, phase=None):
         # Deprecated wrapper of `_from_array` so that a deprecation warning
         # can be displaced during initialization with deprecated kwarg
-        return cls._from_array(z, x)
+        if phase is None:
+            phase = 0
+        return cls._from_array(z, x, phase)
 
     @staticmethod
     def _make_np_bool(arr):

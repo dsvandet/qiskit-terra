@@ -89,44 +89,52 @@ class PauliRep():
         """
             
         if phase_format is not None:
-            if phase_format in cls.__PHASE_REP_FORMATS__:
-                cls.__external_phase_rep_format__ = phase_format
+            if phase_format in PauliRep.__PHASE_REP_FORMATS__:
+                PauliRep.__external_phase_rep_format__ = phase_format
             else:
                 raise QiskitError("Invalid phase format")
                 
         if symp_format is not None:
-            if symp_format  in cls.__SYMP_REP_FORMATS__:
-                cls.__external_symp_rep_format__ = symp_format
+            if symp_format  in PauliRep.__SYMP_REP_FORMATS__:
+                PauliRep.__external_symp_rep_format__ = symp_format
             else:
                 raise QiskitError("Invalid symplectic format")
                     
-        if phase_format is None: 
-            phase_format = cls.__DEFAULT_EXTERNAL_PHASE_REP_FORMAT__
+        if phase_format is None:
+            phase_format = PauliRep.__DEFAULT_EXTERNAL_PHASE_REP_FORMAT__
         if symp_format is None:
-            symp_format = cls.__DEFAULT_EXTERNAL_SYMP_FORMAT__      
+            symp_format = PauliRep.__DEFAULT_EXTERNAL_SYMP_FORMAT__
         
-        cls.__external_phase_rep_format__ = phase_format
-        cls.__external_symp_rep_format__ = symp_format
-        cls.__external_pauli_rep_format__ = phase_format + symp_format
+        PauliRep.__external_phase_rep_format__ = phase_format
+        PauliRep.__external_symp_rep_format__ = symp_format
+        PauliRep.__external_pauli_rep_format__ = phase_format + symp_format
 
     # ---------------------------------------------------------------------
     # Property methods
     # ---------------------------------------------------------------------
 
-    @staticmethod
-    def set_formats(*, phase_format=None, symp_format=None):
+    @classmethod
+    def set_formats(cls,*, phase_format=None, symp_format=None, pauli_format=None):
         """Update the external phase and symplectic represenations
         
         Calling with no parameters will reset to the default external
         representations
 
+        You can either set the formats individually via phase_format and
+        symp_format or in one combined string via pauli_format
+
         Args:
             phase_format (str) : Phase format string from __PHASE_REP_FORMATS__. Default = '-i'
             symp_format (str): Symplectic format string from __SYMP_REP_FORMATS__. Default = 'YZX'
+            pauli_format (str): Pauli format string from __PAULI_REP_FORMATS__. Default = None
 
-        Raiss:
+        Raises:
             QiskitError: If formats are not implemented
         """
+
+        if pauli_format is not None:
+            if pauli_format in PauliRep.__PAULI_REP_FORMATS__:
+                phase_format, symp_format = cls._split_rep(pauli_format)
         PauliRep._set_formats(phase_format=phase_format, symp_format=symp_format)
 
     # External formats
@@ -148,12 +156,12 @@ class PauliRep():
             QiskitError: If unsupported format is requested
         """
         if in_format is None:
-            return cls.__external_pauli_rep_format__
+            return PauliRep.__external_pauli_rep_format__
 
         if in_format in PauliRep.__PAULI_REP_FORMATS__:
-            phase_format, symp_format = PauliRep._split_rep(in_format)
-            cls.set_formats(phase_format=phase_format, symp_format=symp_format)
-            return cls.__external_pauli_rep_format__
+            phase_format, symp_format = cls._split_rep(in_format)
+            PauliRep.set_formats(phase_format=phase_format, symp_format=symp_format)
+            return PauliRep.__external_pauli_rep_format__
         else:
             raise QiskitError("Invalid Pauli representation format or unsupported format")
 
@@ -166,9 +174,9 @@ class PauliRep():
 
         """
         if phase_format is None:
-            return cls.__external_phase_rep_format__
+            return PauliRep.__external_phase_rep_format__
 
-        cls.set_formats(phase_format=phase_format)
+        PauliRep.set_formats(phase_format=phase_format)
 
     @classmethod
     def external_symp_format(cls, symp_format=None):
@@ -178,10 +186,10 @@ class PauliRep():
             str: Symplectic representation format for Pauli operator
         """
         if symp_format is None:
-            return cls.__external_symp_rep_format__
+            return PauliRep.__external_symp_rep_format__
 
-        cls.set_formats(symp_format=symp_format)
-        return cls.__external_symp_rep_format__
+        PauliRep.set_formats(symp_format=symp_format)
+        return PauliRep.__external_symp_rep_format__
 
     # Internal formats
 
@@ -192,7 +200,7 @@ class PauliRep():
         Returns:
             str: Internal phase format
         """
-        return cls.__INTERNAL_PHASE_REP_FORMAT__
+        return PauliRep.__INTERNAL_PHASE_REP_FORMAT__
 
     @classmethod
     def internal_symp_format(cls):
@@ -201,7 +209,7 @@ class PauliRep():
         Returns:
             str: internal symplectic format
         """
-        return cls.__INTERNAL_SYMP_REP_FORMAT__
+        return PauliRep.__INTERNAL_SYMP_REP_FORMAT__
 
     @classmethod
     def internal_pauli_format(cls):
@@ -210,7 +218,7 @@ class PauliRep():
         Returns:
             str: Internal Pauli format
         """
-        return cls.__INTERNAL_PAULI_REP_FORMAT__
+        return PauliRep.__INTERNAL_PAULI_REP_FORMAT__
 
     # Formats lists
 
@@ -221,7 +229,7 @@ class PauliRep():
         Returns:
             list(str): available phase formats
         """
-        return cls.__PHASE_REP_FORMATS__
+        return PauliRep.__PHASE_REP_FORMATS__
 
     @classmethod
     def symp_formats(cls):
@@ -230,7 +238,7 @@ class PauliRep():
         Returns:
             list(str): aailable symplectic formats
         """
-        return cls.__SYMP_REP_FORMATS__
+        return PauliRep.__SYMP_REP_FORMATS__
     
     @classmethod
     def pauli_formats(cls):
@@ -239,7 +247,7 @@ class PauliRep():
         Returns:
             list(str): available Pauli formats
         """
-        return cls.__PAULI_REP_FORMATS__
+        return PauliRep.__PAULI_REP_FORMATS__
     
     #-------------------------------------------------------------------------------
     # Representation Methods and Conversions
@@ -330,7 +338,7 @@ class PauliRep():
             raise QiskitError("Phase representation format not supported or invalid")
 
         if not isinstance(phase, np.ndarray):
-            phase = np.asarray(phase)
+            phase = np.asarray([phase])
 
         # Binary expansion of an index
         _BI = [[0,0],
@@ -390,19 +398,34 @@ class PauliRep():
             y_count=0,
             *,
             input_format=None,
-            output_format=None):
+            output_format=None,
+            direction='out'):
         """Convert a phase exponent from input_format representation to output_format
         representation with respect to a Pauli wth y_count number of Y's (XZ's, ZX's).
+
+        Setting one of input_format or output_format will override any direction given
+        via the direction input.
         
         Args:
             phase(str): phase exponent to convert
-            input_format(str): Pauli format representation of phase input
-            output_format(str): Pauli format representation of phase output
+            input_format(str): Pauli format representation of phase input. Default = External Rep Format
+            output_format(str): Pauli format representation of phase output. Default = Internal Rep Format
+            direction(str): 'in' for external to internal and 'out' for internal to external representations. Default 'out'
         """
+        if input_format is None and output_format is None:
+            if direction == 'in':
+                input_format=PauliRep.external_pauli_format()
+                output_format=PauliRep.internal_pauli_format()
+            elif direction == 'out':
+                input_format=PauliRep.internal_pauli_format()
+                output_format=PauliRep.external_pauli_format()
+            else:
+                raise QiskitError("Invalid direction for conversion")
+
         if input_format is None:
-            input_format=PauliRep.internal_pauli_format()
+            input_format=PauliRep.external_pauli_format()
         if output_format is None:
-            output_format=PauliRep.external_pauli_format()
+            output_format=PauliRep.internal_pauli_format()
         
         if input_format not in PauliRep.__PAULI_REP_FORMATS__:
             raise QiskitError(f"Unsupported Pauli represenations {input_format}")
@@ -412,6 +435,14 @@ class PauliRep():
             raise QiskitError("The phase exponent must be an element in Z_4"
                 " or a pair of elements in F_2 x F_2"
                 )
+
+        if not isinstance(y_count, np.ndarray):
+            if isinstance(y_count, list):
+                y_count = np.asarray(y_count)
+            elif isinstance(y_count, (int, np.integer)):
+                y_count = np.asarray([y_count])
+            else:
+                raise QiskitError("y_count not an integer or numpy.array or list of integers")
 
         return PauliRep._change_representation(phase, y_count, input_format, output_format)
 
@@ -441,16 +472,21 @@ class PauliRep():
 
         # The converter table is used to convert to powers of i. This is flipped to -i if needed.
         
-        converter={'XZ':{'ZX':0, 'XZ':2, 'XZY':3, 'YZX':3},
+        converter={'XZ':{'XZ':0, 'ZX':2, 'XZY':3, 'YZX':3},
                    'ZX':{'ZX':0, 'XZ':2, 'XZY':1, 'YZX':1},
                   'XZY':{'XZY':0, 'YZX':0, 'XZ':1, 'ZX':1},
                   'YZX':{'YZX':0, 'XZY':0, 'XZ':3, 'ZX':3}}
-
+        #print(input_symp_format, output_symp_format)
         multiplier = converter[input_symp_format][output_symp_format]
-        if output_phase_format in ['-i','-is'] and multiplier != 0:
+        #print(f"multiplier={multiplier}")
+        if output_phase_format in ['-i','-is'] and multiplier%2 != 0:
             multiplier = np.mod(multiplier + 2, 4)
 
+        #print(f"multiplier={multiplier}")
+
         phase = PauliRep.convert_phase_exponent(phase, input_phase_format, output_phase_format)
+
+        #print(phase)
 
         def _cal_phase(exp, marker):
             if marker < 2:
@@ -464,6 +500,7 @@ class PauliRep():
             res = np.mod(phase.T[0] + multiplier * y_count, 4)
             phase  = np.asarray([_cal_phase(exp, marker) for exp, marker in zip(phase,res)])
 
+        #print(phase)
         return phase
 
     @staticmethod
@@ -477,11 +514,17 @@ class PauliRep():
     def _exponent_to_coeff(phase, input_phase_format):
         """Convert an array of phase exponents to an array of phase coefficients"""
         if isinstance(phase, (int, np.integer)):
-            phase = np.asarray(phase)
+            phase = np.asarray([phase])
         if input_phase_format == 'i':
             return 1j**phase
         if input_phase_format == '-i':
             return (0-1j)**phase
+        if not isinstance(phase, (list,np.ndarray)):
+            raise QiskitError("phase needs to be a list or nump.ndarray for 'is' and '-is' phase formats")
+        if isinstance(phase, list):
+            phase = np.asarray(phase)
+        if phase.ndim !=2:
+            raise QiskitError("phase has wrong dimsions for a 'is', '-is' phase vector")
         if input_phase_format == 'is':
             trans = phase.T
             return np.multiply(1j**trans[0],(-1)**trans[1])
@@ -495,7 +538,12 @@ class PauliRep():
         if output_phase_format not in PauliRep.__PHASE_REP_FORMATS__:
             raise QiskitError(f"Invalid phase exponent format {output_phase_format}")
         if not isinstance(coeff, np.ndarray):
-            coeff = np.asarray(coeff)
+            if isinstance(coeff, list):
+                coeff = np.asarray(coeff)
+            elif isinstance(coeff, (int, float, complex)):
+                coeff = np.asarray([coeff])
+            else:
+                raise QiskitError("Coefficient provided is not a number")
         if roundit:
             return PauliRep._coeff_to_exponent(coeff.round(), output_phase_format)
         else:
@@ -532,7 +580,7 @@ class PauliRep():
         """Convert array data to BasePauli data."""
         
         if input_format is None:
-            input_format = PauliRep.external_pauli_format
+            input_format = PauliRep.external_pauli_format()
         
         if isinstance(z, np.ndarray) and z.dtype == bool:
             array_z = z
@@ -560,12 +608,12 @@ class PauliRep():
         # External Pauli representation is '-iYZX' format and is assumed as input
         # when referencing is not possible for the phase.
 
-        base_phase = PauliRep.convert_phase_exponent(
+        base_phase = PauliRep.change_representation(
                 phase,
-                y_count=PauliRep.count_y(array_z, array_x),
+                y_count=PauliRep._count_y(array_z, array_x),
                 input_format=input_format,
-                output_format=PauliRep.internal_pauli_format)
-        
+                output_format=PauliRep.internal_pauli_format())
+
         return array_z, array_x, base_phase
 
     @staticmethod
@@ -670,5 +718,5 @@ class PauliRep():
             label = coeff_labels[phase] + label
         if return_phase:
             return label, phase
-        return label    
+        return label
 

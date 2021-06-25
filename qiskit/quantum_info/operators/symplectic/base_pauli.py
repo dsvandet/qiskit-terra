@@ -178,7 +178,7 @@ class BasePauli(BaseOperator, AdjointMixin, MultiplyMixin, PauliRep):
         """.format(cls=type(self).__name__)
         phase = self.coeff_to_exponent(
                 other,
-                output_phase_format=PauliRepBase.__INTERNAL_PHASE_REP_FORMAT__,
+                output_phase_format=PauliRep.__INTERNAL_PHASE_REP_FORMAT__,
                 roundit=roundit
             )
         return BasePauli(self._z, self._x, np.mod(self._phase + phase, 4))
